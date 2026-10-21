@@ -29,8 +29,12 @@ Rules that differ from upstream:
 ## Upstream workflow
 
 - `main` mirrors `upstream/main`. `redesigned` is `main` plus the fork.
+- A fresh clone needs the remote and rerere once:
+  `git remote add upstream https://github.com/Convex-Works/tide.git`,
+  `git remote set-url --push upstream DISABLED`,
+  `git config rerere.enabled true`.
 - To take updates: `git fetch upstream`, fast-forward `main` to `upstream/main`,
-  then `git merge main` into `redesigned`. Merge, never rebase. `rerere` is on.
+  then `git merge main` into `redesigned`. Merge, never rebase.
 - Keep fork changes in new files. Keep edits to upstream files (`AGENTS.md`,
   `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md`) to the one pointer line each
   already carries; put fork documentation in `docs/FORK.md`.
