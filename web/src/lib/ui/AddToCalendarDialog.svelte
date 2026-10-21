@@ -53,13 +53,13 @@
 </script>
 
 <Dialog bind:open title="Add to calendar" width={400}>
-  <form class="grid gap-3" onsubmit={download} novalidate>
-    <p class="m-0 -mt-2 truncate text-[12px] text-ink-2">{room?.name}</p>
+  <form class="grid gap-4" onsubmit={download} novalidate>
+    <p class="m-0 -mt-3 truncate text-[14px] text-ink-2">{room?.name}</p>
     <div>
       <MeetingTimesFields bind:times {error} autofocus />
     </div>
-    <div class="flex justify-end">
-      <Button type="submit" variant="accent">Download .ics</Button>
+    <div class="flex justify-end pt-1">
+      <Button type="submit" variant="accent" class="h-11! max-sm:flex-1">Download .ics</Button>
     </div>
   </form>
 </Dialog>

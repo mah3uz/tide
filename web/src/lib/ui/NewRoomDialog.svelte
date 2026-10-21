@@ -167,19 +167,19 @@
 
 <Dialog bind:open title="New room" width={440} dismissible={!creating}>
   <form
-    class="grid gap-3"
+    class="grid gap-4"
     onsubmit={(event) => {
       event.preventDefault();
       void submit(true);
     }}
     novalidate
   >
-    <label class="grid gap-1" for="new-room-name">
-      <span class="text-[12px] text-ink-2">Name</span>
+    <label class="grid gap-1.5" for="new-room-name">
+      <span class="text-[13px] text-ink-2">Name</span>
       <input
         id="new-room-name"
         name="room-name"
-        class="h-7 w-full min-w-0 rounded-control border border-border bg-surface px-2 text-[13px] text-ink outline-none placeholder:text-ink-2 focus:border-accent"
+        class="h-11 w-full min-w-0 rounded-sm border border-line-strong bg-surface-2 px-3.5 text-[15px] text-ink outline-none placeholder:text-ink-3 focus:border-accent"
         bind:value={name}
         placeholder={slug || 'Same as the link'}
         maxlength={nameMaxLength}
@@ -188,20 +188,20 @@
       />
     </label>
 
-    <div class="grid gap-1">
-      <label class="text-[12px] text-ink-2" for="new-room-slug">Link</label>
+    <div class="grid gap-1.5">
+      <label class="text-[13px] text-ink-2" for="new-room-slug">Link</label>
       <div
-        class="flex h-7 min-w-0 items-center rounded-control border bg-surface pl-2 focus-within:border-accent {slugMessage
+        class="flex h-11 min-w-0 items-center rounded-sm border bg-surface-2 pl-3.5 focus-within:border-accent {slugMessage
           ? 'border-rec'
-          : 'border-border'}"
+          : 'border-line-strong'}"
       >
-        <span class="mono min-w-0 shrink truncate text-[12px] text-ink-2" title={`${origin}/m/`}
+        <span class="mono min-w-0 shrink truncate text-[13px] text-ink-3" title={`${origin}/m/`}
           >{origin}/m/</span
         >
         <input
           id="new-room-slug"
           name="room-slug"
-          class="slug-input mono h-full min-w-[8ch] flex-1 border-0 bg-transparent p-0 text-[12px] text-ink outline-none"
+          class="slug-input mono h-full min-w-[8ch] flex-1 border-0 bg-transparent p-0 text-[13px] text-ink outline-none placeholder:text-ink-3"
           value={slugDraft}
           placeholder="random"
           title="Leave blank for a random link"
@@ -222,7 +222,7 @@
         />
         <button
           type="button"
-          class="grid h-full w-7 shrink-0 place-items-center rounded-r-control border-0 bg-transparent p-0 text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+          class="grid h-full w-11 shrink-0 place-items-center rounded-r-sm border-0 bg-transparent p-0 text-ink-2 transition-colors duration-(--dur-1) hover:bg-line hover:text-ink"
           aria-label="Suggest another link"
           title="Suggest another link"
           onclick={shuffle}
@@ -231,15 +231,15 @@
         </button>
       </div>
       {#if slugMessage}
-        <p id="new-room-slug-status" class="m-0 text-[11px] text-rec">{slugMessage}</p>
+        <p id="new-room-slug-status" class="m-0 text-[12px] text-rec-ink">{slugMessage}</p>
       {/if}
     </div>
 
     <div class="grid gap-2">
-      <label class="flex w-fit cursor-pointer items-center gap-2 text-[13px] text-ink">
+      <label class="flex min-h-11 w-fit cursor-pointer items-center gap-2.5 text-[14px] text-ink">
         <input
           type="checkbox"
-          class="m-0 size-3.5 accent-[var(--accent)]"
+          class="m-0 size-4 accent-accent"
           checked={withTimes}
           onchange={toggleTimes}
         />
@@ -250,11 +250,18 @@
       {/if}
     </div>
 
-    {#if error}<p class="m-0 text-[12px] text-rec" role="alert">{error}</p>{/if}
+    {#if error}<p class="m-0 text-[13px] text-rec-ink" role="alert">{error}</p>{/if}
 
-    <div class="flex justify-end gap-2">
-      <Button type="button" disabled={creating} onclick={() => void submit(false)}>Create</Button>
-      <Button type="submit" variant="accent" disabled={creating}>Create &amp; join</Button>
+    <div class="flex justify-end gap-2 pt-1">
+      <Button
+        type="button"
+        class="h-11! max-sm:flex-1"
+        disabled={creating}
+        onclick={() => void submit(false)}>Create</Button
+      >
+      <Button type="submit" variant="accent" class="h-11! max-sm:flex-1" disabled={creating}
+        >Create &amp; join</Button
+      >
     </div>
   </form>
 </Dialog>

@@ -44,6 +44,8 @@
   import { dateTimeLabel, durationLabel, isoDate, sizeLabel } from '#lib/format.js';
   import Button from '#lib/ui/Button.svelte';
   import RoomStatus from '#lib/ui/RoomStatus.svelte';
+  import ThemeToggle from '#lib/ui/ThemeToggle.svelte';
+  import Wordmark from '#lib/ui/Wordmark.svelte';
 
   type LoadState = 'loading' | 'signed-out' | 'not-found' | 'ready' | 'error';
 
@@ -56,11 +58,18 @@
   const fastPollMs = 3_000;
   const slowPollMs = 15_000;
 
-  // The small bordered controls and status pills of a recording's row.
+  // The small pill controls and status pills of a recording's row.
   const rowControl =
-    'inline-flex h-6 shrink-0 items-center gap-1 rounded-control border px-2 text-[11px] no-underline transition-colors disabled:opacity-60';
-  const rowButton = `${rowControl} border-border bg-paper text-ink hover:bg-surface-2`;
-  const pill = 'w-max shrink-0 rounded-full border px-1.5 text-[11px] leading-[18px]';
+    'inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-pill border px-3 text-[12px] font-medium no-underline transition-colors duration-(--dur-1) disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:min-w-11';
+  const rowButton = `${rowControl} border-line-strong bg-transparent text-ink hover:bg-surface-2`;
+  const pill =
+    'inline-flex w-max shrink-0 items-center gap-1.5 rounded-pill px-2.5 text-[11px] font-semibold leading-[22px]';
+  const settingsButton =
+    'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-pill border px-4 text-[14px] font-medium transition-colors duration-(--dur-1) disabled:opacity-50 pointer-coarse:h-11';
+  const quiet = 'border-line-strong bg-transparent text-ink-2 hover:bg-surface-2 hover:text-ink';
+  const confirming = 'border-danger bg-danger text-on-danger';
+  const stateCard =
+    'mt-4 rounded-lg border border-dashed border-line-strong px-6 py-10 text-center text-[14px] text-ink-2';
 
   // A completed recording is the normal case and carries no status; the
   // others say what the recording is doing, or that it failed.
@@ -108,8 +117,8 @@
   // server with transcripts off never sends, so they all go with it.
   const rowGrid = $derived(
     recordings.some((recording) => recording.transcript)
-      ? 'grid-cols-[max-content_minmax(0,1fr)_auto] sm:grid-cols-[max-content_minmax(0,1fr)_56px_64px_auto] lg:grid-cols-[max-content_minmax(0,1fr)_56px_64px_248px_auto]'
-      : 'grid-cols-[max-content_minmax(0,1fr)_auto] sm:grid-cols-[max-content_minmax(0,1fr)_56px_64px_auto]'
+      ? 'grid-cols-[max-content_minmax(0,1fr)_auto] sm:grid-cols-[minmax(9.5rem,max-content)_minmax(0,1fr)_56px_64px_auto] lg:grid-cols-[minmax(9.5rem,max-content)_minmax(0,1fr)_56px_64px_248px_auto]'
+      : 'grid-cols-[max-content_minmax(0,1fr)_auto] sm:grid-cols-[minmax(9.5rem,max-content)_minmax(0,1fr)_56px_64px_auto]'
   );
 
   async function load(): Promise<void> {
@@ -368,15 +377,15 @@
   }
 
   function statusTone(status: string): string {
-    if (pendingStatuses.includes(status)) return 'text-warn border-warn/40 bg-warn/10';
-    if (status === 'failed') return 'text-rec border-rec/30 bg-rec/10';
-    return 'text-ink-2 border-border bg-surface';
+    if (status === 'recording' || status === 'failed') return 'bg-rec-soft text-rec-ink';
+    if (pendingStatuses.includes(status)) return 'bg-warn/12 text-warn';
+    return 'bg-surface-2 text-ink-2';
   }
 
   function transcriptTone(status: string): string {
-    if (status === TranscriptRunning) return 'border-warn/40 bg-warn/10 text-warn';
-    if (status === TranscriptFailed) return 'border-rec/30 bg-rec/10 text-rec';
-    return 'border-border text-ink-2';
+    if (status === TranscriptRunning) return 'bg-warn/12 text-warn';
+    if (status === TranscriptFailed) return 'bg-rec-soft text-rec-ink';
+    return 'bg-surface-2 text-ink-2';
   }
 
   /** The words the row's live region reads out: the status, never the progress. */
@@ -431,7 +440,7 @@
     </button>
   {:else if transcript.status === TranscriptCompleted}
     {#if transcript.speakers != null}
-      <span class="shrink-0 text-[11px] text-ink-2">
+      <span class="shrink-0 text-[12px] text-ink-2">
         {transcript.speakers}
         {transcript.speakers === 1 ? 'speaker' : 'speakers'}
       </span>
@@ -448,7 +457,7 @@
     <!-- The same transcript as timed captions: for a video player or a
          podcast host, so a format beside the transcript, not a second one. -->
     <a
-      class="mono shrink-0 text-[11px] text-ink-2 hover:text-accent"
+      class="mono inline-flex shrink-0 items-center px-1 text-[12px] text-ink-2 hover:text-ink pointer-coarse:min-h-11"
       href={transcriptDownloadURL(id, TranscriptFormatVTT)}
       target="_blank"
       rel="noreferrer"
@@ -482,44 +491,67 @@
   {/if}
 {/snippet}
 
-<header class="flex h-12 items-center justify-between border-b border-border px-4">
-  <a class="text-[15px] font-[550] tracking-[0.02em] text-accent no-underline" href="/">tide</a>
-  <a
-    class="inline-flex items-center gap-1 text-[12px] text-ink-2 no-underline transition-colors hover:text-ink"
-    href="/"
+<header
+  class="mx-auto flex w-[min(100%,1212px)] items-center justify-between gap-3 pt-[max(28px,env(safe-area-inset-top))] pr-[max(16px,env(safe-area-inset-right))] pb-7 pl-[max(16px,env(safe-area-inset-left))] max-sm:pt-[max(16px,env(safe-area-inset-top))] max-sm:pb-2"
+>
+  <a class="inline-flex min-h-11 items-center rounded-sm no-underline" href="/"
+    ><Wordmark size={20} /></a
   >
-    <ArrowLeft size={16} weight="regular" aria-hidden="true" /> All rooms
-  </a>
+  <div class="flex items-center gap-2">
+    <ThemeToggle />
+    <a
+      class="inline-flex h-9 items-center gap-1.5 rounded-pill border border-line-strong px-3.5 text-[13px] text-ink no-underline transition-colors duration-(--dur-1) hover:bg-surface-2 pointer-coarse:h-11"
+      href="/"
+    >
+      <ArrowLeft size={16} weight="regular" aria-hidden="true" /> All rooms
+    </a>
+  </div>
 </header>
 
-<main class="mx-auto w-[min(100%,880px)] px-4 py-8">
+<main
+  class="mx-auto w-[min(100%,1212px)] pr-[max(16px,env(safe-area-inset-right))] pb-16 pl-[max(16px,env(safe-area-inset-left))]"
+>
   {#if loadState === 'loading'}
-    <p class="text-[12px] text-ink-2" aria-live="polite">Loading…</p>
+    <p class="pt-10 text-[13px] text-ink-3" aria-live="polite">Loading…</p>
   {:else if loadState === 'signed-out'}
     <!-- Only with sign-in: an anonymous tide answers /api/me with a new
          session rather than 401, so a lost session shows as not-found. -->
-    <p class="text-[13px] text-ink-2">
+    <p class="{stateCard} mt-10">
       Sign in from the <a class="text-accent" href="/">dashboard</a> to manage this room.
     </p>
   {:else if loadState === 'not-found'}
-    <div class="rounded-card border border-border bg-surface px-4 py-8 text-center">
-      <p class="text-[13px] text-ink">This room doesn't exist, or you don't own it.</p>
-      <a class="mt-2 inline-block text-[12px] text-accent" href="/">← Back to rooms</a>
+    <div class="{stateCard} mt-10">
+      <p class="m-0 text-[15px] text-ink">This room doesn't exist, or you don't own it.</p>
+      <a class="mt-3 inline-block text-[14px] text-accent" href="/">← Back to rooms</a>
     </div>
   {:else if loadState === 'error'}
-    <div class="rounded-card border border-border bg-surface px-4 py-8 text-center">
-      <p class="text-[13px] text-rec" role="alert">{error}</p>
-      <button class="mt-2 text-[12px] text-accent" type="button" onclick={() => void load()}>
-        Try again
-      </button>
+    <div class="{stateCard} mt-10">
+      <p class="m-0 text-[15px] text-rec-ink" role="alert">{error}</p>
+      <Button type="button" class="mt-4" onclick={() => void load()}>Try again</Button>
     </div>
   {:else if room}
-    <div class="min-w-0">
-      <h1 class="m-0 truncate text-[18px] font-[550] leading-6 text-ink">{room.name}</h1>
-      <div class="mt-1"><RoomStatus {room} /></div>
-      <div class="mt-3 flex flex-wrap items-center gap-2">
-        <Button href={`/m/${room.slug}`} variant="accent">Join meeting</Button>
-        <Button type="button" variant="default" onclick={() => void copyLink()}>
+    <div class="min-w-0 pt-10 max-sm:pt-5">
+      <span class="mono block truncate text-[12px] tracking-[0.06em] text-accent">
+        /m/{room.slug}
+      </span>
+      <h1
+        class="m-0 mt-3 text-[64px] leading-none font-medium tracking-[-0.04em] text-ink [overflow-wrap:anywhere] max-sm:text-[44px]"
+      >
+        {room.name}
+      </h1>
+      <div class="mt-4"><RoomStatus {room} /></div>
+      <div class="mt-7 flex flex-wrap items-center gap-2">
+        <Button
+          href={`/m/${room.slug}`}
+          variant="accent"
+          class="h-13! px-7! text-[16px]! max-sm:flex-1">Join meeting</Button
+        >
+        <Button
+          type="button"
+          variant="default"
+          class="h-13! px-5! text-[15px]! max-sm:flex-1"
+          onclick={() => void copyLink()}
+        >
           {#if copied}
             <Check size={16} weight="regular" aria-hidden="true" /> Copied
           {:else}
@@ -529,39 +561,33 @@
       </div>
     </div>
 
-    {#if error}<p class="mt-4 text-[12px] text-rec" role="alert">{error}</p>{/if}
+    {#if error}<p class="mt-4 text-[13px] text-rec-ink" role="alert">{error}</p>{/if}
 
     {#if recordingOn}
-      <section class="mt-8">
-        <h2 id="recordings-heading" tabindex="-1" class="text-[13px] font-[550] text-ink">
+      <section class="mt-14 max-sm:mt-10">
+        <h2
+          id="recordings-heading"
+          tabindex="-1"
+          class="m-0 text-[22px] font-medium tracking-[-0.02em] text-ink"
+        >
           Recordings
         </h2>
 
         {#if recordingsLoading && recordings.length === 0}
-          <p
-            class="mt-2 rounded-card border border-border bg-surface px-3 py-6 text-center text-[12px] text-ink-2"
-          >
-            Loading recordings…
-          </p>
+          <p class={stateCard}>Loading recordings…</p>
         {:else if recordingsError && recordings.length === 0}
-          <div class="mt-2 rounded-card border border-border bg-surface px-3 py-6 text-center">
-            <p class="m-0 text-[12px] text-rec" role="alert">{recordingsError}</p>
-            <button
-              class="mt-2 border-0 bg-transparent p-0 text-[12px] text-accent"
-              type="button"
-              onclick={() => void loadRecordings()}
-            >
+          <div class={stateCard}>
+            <p class="m-0 text-rec-ink" role="alert">{recordingsError}</p>
+            <Button type="button" class="mt-4" onclick={() => void loadRecordings()}>
               Try again
-            </button>
+            </Button>
           </div>
         {:else if recordings.length === 0}
-          <p
-            class="mt-2 rounded-card border border-border bg-surface px-3 py-6 text-center text-[12px] text-ink-2"
-          >
+          <p class={stateCard}>
             No recordings yet. They'll appear here after a meeting is recorded.
           </p>
         {:else}
-          <div class="mt-2 overflow-hidden rounded-card border border-border bg-surface">
+          <div class="mt-4 overflow-hidden rounded-lg border border-line bg-surface">
             {#each recordings as recording (recording.id)}
               {@const when = dateTimeLabel(recording.started_at)}
               {@const note = transcriptNote(recording.transcript)}
@@ -570,32 +596,35 @@
                  the actions move to the last column, and reading-flow keeps
                  Tab order visual where browsers support it. -->
               <div
-                class="grid {rowGrid} items-center gap-x-3 gap-y-1.5 border-b border-border px-3 py-2.5 [reading-flow:grid-rows] last:border-b-0"
+                class="grid {rowGrid} items-center gap-x-4 gap-y-2 border-b border-line px-5 py-3.5 [reading-flow:grid-rows] last:border-b-0 max-sm:gap-x-3 max-sm:px-4"
                 data-recording-id={recording.id}
               >
                 <span class="flex w-max items-center gap-1">
                   {#if recording.status !== 'completed'}
                     <span class="{pill} {statusTone(recording.status)}">
+                      {#if recording.status === 'recording'}
+                        <span class="size-1.5 rounded-pill bg-rec" aria-hidden="true"></span>
+                      {/if}
                       {recordingStatusWords[recording.status] ?? recording.status}
                     </span>
                   {/if}
-                  <span class="{pill} border-border text-ink-2">
+                  <span class="{pill} bg-surface-2 text-ink-2">
                     {recording.audio_only ? 'Audio' : 'Video'}
                   </span>
                 </span>
                 <time
-                  class="min-w-0 truncate text-[11px] text-ink-2"
+                  class="mono min-w-0 truncate text-[12px] text-ink"
                   datetime={new Date(recording.started_at * 1000).toISOString()}
                 >
                   {isoDate(recording.started_at)}
                 </time>
-                <span class="hidden text-[11px] text-ink-2 sm:block">
+                <span class="mono hidden text-[12px] text-ink-2 sm:block">
                   {durationLabel(recording.duration_s)}
                 </span>
-                <span class="hidden text-[11px] text-ink-2 sm:block">
+                <span class="hidden text-[12px] text-ink-2 sm:block">
                   {sizeLabel(recording.size_bytes)}
                 </span>
-                <div class="flex justify-end gap-1 lg:col-[-2/-1] lg:row-start-1">
+                <div class="flex justify-end gap-1.5 lg:col-[-2/-1] lg:row-start-1">
                   {#if recording.status === 'completed'}
                     <a
                       class={rowButton}
@@ -611,9 +640,7 @@
                   <button
                     type="button"
                     disabled={busy || pendingStatuses.includes(recording.status)}
-                    class="{rowControl} {deleteRecordingID === recording.id
-                      ? 'border-rec bg-rec text-white'
-                      : 'border-border bg-paper text-ink-2 hover:bg-surface-2 hover:text-ink'}"
+                    class="{rowControl} {deleteRecordingID === recording.id ? confirming : quiet}"
                     aria-label={deleteRecordingID === recording.id
                       ? `Confirm delete the recording from ${when}`
                       : `Delete the recording from ${when}`}
@@ -633,7 +660,7 @@
                   class="col-span-full min-w-0 lg:col-span-1 {recording.transcript ? '' : 'hidden'}"
                 >
                   <div
-                    class="flex w-fit max-w-full flex-wrap items-center gap-1.5 rounded-control"
+                    class="flex w-fit max-w-full flex-wrap items-center gap-1.5 rounded-sm"
                     tabindex="-1"
                     data-transcript
                     data-testid="transcript"
@@ -646,7 +673,7 @@
                 </div>
                 {#if note}
                   <p
-                    class="col-span-full m-0 text-[11px] leading-4 text-ink [contain:inline-size] lg:col-[5/-1]"
+                    class="col-span-full m-0 text-[12px] leading-4 text-ink-2 [contain:inline-size] lg:col-[5/-1]"
                     data-testid="transcript-note"
                   >
                     {note}
@@ -662,13 +689,13 @@
       </section>
     {/if}
 
-    <section class="mt-8">
-      <h2 class="text-[13px] font-[550] text-ink">Settings</h2>
-      <div class="mt-2 overflow-hidden rounded-card border border-border bg-surface">
-        <div class="flex items-center justify-between gap-4 px-3 py-2.5">
+    <section class="mt-14 max-sm:mt-10">
+      <h2 class="m-0 text-[22px] font-medium tracking-[-0.02em] text-ink">Settings</h2>
+      <div class="mt-4 overflow-hidden rounded-lg border border-line bg-surface">
+        <div class="flex items-center justify-between gap-4 px-5 py-4 max-sm:px-4">
           <div class="min-w-0">
-            <div class="text-[13px] text-ink">Lobby</div>
-            <div class="text-[12px] text-ink-2">
+            <div class="text-[15px] font-medium text-ink">Lobby</div>
+            <div class="mt-0.5 text-[13px] text-ink-2">
               Hold guests in a waiting room until you admit them.
             </div>
           </div>
@@ -677,26 +704,26 @@
             onCheckedChange={(v) => void toggleLobby(v)}
             disabled={busy}
             aria-label="Lobby"
-            class="relative box-border inline-block h-[18px] w-[32px] shrink-0 cursor-pointer appearance-none rounded-full border-0 p-0 transition-colors data-[state=checked]:bg-accent data-[state=unchecked]:bg-border disabled:opacity-60"
+            class="relative box-border inline-block h-7 w-12 shrink-0 cursor-pointer appearance-none rounded-pill border-0 p-0 transition-colors duration-(--dur-1) data-[state=checked]:bg-accent data-[state=unchecked]:bg-line-strong disabled:opacity-50"
           >
             <Switch.Thumb
-              class="pointer-events-none absolute left-[2px] top-[2px] block size-[14px] rounded-full bg-white transition-transform data-[state=checked]:translate-x-[14px] data-[state=unchecked]:translate-x-0"
+              class="pointer-events-none absolute top-[3px] left-[3px] block size-[22px] rounded-pill transition-transform duration-(--dur-2) ease-out data-[state=checked]:translate-x-5 data-[state=checked]:bg-on-accent data-[state=unchecked]:translate-x-0 data-[state=unchecked]:bg-ink-3"
             />
           </Switch.Root>
         </div>
 
         <form
-          class="flex items-end justify-between gap-4 border-t border-border p-3"
+          class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-t border-line px-5 py-4 max-sm:px-4"
           onsubmit={changeSlug}
         >
           <label class="min-w-0 flex-1" for="room-slug">
-            <span class="block text-[13px] text-ink">Custom room link</span>
-            <span class="mt-0.5 block text-[12px] text-ink-2">Changing it breaks the old link.</span
+            <span class="block text-[15px] font-medium text-ink">Custom room link</span>
+            <span class="mt-0.5 block text-[13px] text-ink-2">Changing it breaks the old link.</span
             >
             <input
               id="room-slug"
               name="room-slug"
-              class="mono mt-2 h-7 w-full max-w-sm rounded-control border border-border bg-paper px-2 text-[12px] text-ink outline-none focus:border-accent aria-[invalid=true]:border-rec"
+              class="mono mt-3 h-11 w-full max-w-sm rounded-sm border border-line-strong bg-surface-2 px-3.5 text-[13px] text-ink outline-none focus:border-accent disabled:opacity-60 aria-[invalid=true]:border-rec"
               value={slugDraft}
               minlength="3"
               maxlength="64"
@@ -722,8 +749,8 @@
             />
             <span
               id="room-slug-status"
-              class="mt-1 block text-[11px] {slugInvalid && !room.active && !room.recording
-                ? 'text-rec'
+              class="mt-1.5 block text-[12px] {slugInvalid && !room.active && !room.recording
+                ? 'text-rec-ink'
                 : 'text-ink-2'}"
             >
               {#if room.active || room.recording}
@@ -743,7 +770,7 @@
               room.active ||
               room.recording ||
               slugDraft.trim().toLowerCase() === room.slug}
-            class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control border border-border bg-paper px-2.5 text-[12px] text-ink transition-colors hover:bg-surface-2 disabled:opacity-60"
+            class="{settingsButton} border-line-strong bg-surface-2 text-ink hover:bg-[color-mix(in_srgb,var(--ink)_7%,var(--surface-2))]"
           >
             {#if slugSaved}
               <Check size={16} weight="regular" aria-hidden="true" /> Saved
@@ -753,10 +780,12 @@
           </button>
         </form>
 
-        <div class="flex items-center justify-between gap-4 border-t border-border p-3">
+        <div
+          class="flex items-center justify-between gap-4 border-t border-line px-5 py-4 max-sm:px-4"
+        >
           <div class="min-w-0">
-            <div class="text-[13px] text-ink">Delete room</div>
-            <div class="text-[12px] text-ink-2">
+            <div class="text-[15px] font-medium text-ink">Delete room</div>
+            <div class="mt-0.5 text-[13px] text-ink-2">
               {recordingOn
                 ? "Removes the room, its link, and every recording. This can't be undone."
                 : "Removes the room and its link. This can't be undone."}
@@ -766,9 +795,7 @@
             type="button"
             disabled={busy}
             onclick={() => void removeRoom()}
-            class="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control border px-2.5 text-[12px] transition-colors disabled:opacity-60 {deleteConfirm
-              ? 'border-rec bg-rec text-white'
-              : 'border-border bg-paper text-ink-2 hover:bg-surface-2 hover:text-ink'}"
+            class="{settingsButton} {deleteConfirm ? confirming : quiet}"
           >
             {#if deleteConfirm}
               Confirm delete
