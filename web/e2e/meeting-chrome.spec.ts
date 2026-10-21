@@ -710,3 +710,63 @@ test('a tile left off the stage keeps no video or level meter', async ({ page })
   await expect(hidden.locator('video')).toHaveCount(0);
   await expect(hidden.locator('.waveform')).toHaveCount(0);
 });
+
+test('a portrait camera in the landscape lens is shown whole, and covers again once turned', async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  // A phone held upright sends a portrait frame. Cropped to fill the wide
+  // lens it keeps only a middle band: the ceiling and a forehead, not a face.
+  await page.evaluate(() => {
+    type TestRoom = {
+      handleParticipantUpdates(infos: unknown[]): void;
+      remoteParticipants: Map<
+        string,
+        { addSubscribedMediaTrack(track: MediaStreamTrack, sid: string, stream: MediaStream): void }
+      >;
+    };
+    const testWindow = window as Window & { __tideRoom?: TestRoom; __phone?: HTMLCanvasElement };
+    const room = testWindow.__tideRoom!;
+    room.handleParticipantUpdates([
+      {
+        sid: 'PA_phone',
+        identity: 'phone',
+        name: 'Phone',
+        state: 2,
+        metadata: '',
+        attributes: {},
+        kind: 0,
+        version: 1,
+        joinedAt: 0n,
+        dataTracks: [],
+        permission: { canSubscribe: true, canPublish: true, canPublishData: true },
+        tracks: [{ sid: 'TR_cam_phone', type: 1, source: 1, name: 'camera', muted: false }]
+      }
+    ]);
+    const canvas = document.createElement('canvas');
+    canvas.width = 360;
+    canvas.height = 640;
+    const context = canvas.getContext('2d')!;
+    setInterval(() => context.fillRect(0, 0, canvas.width, canvas.height), 50);
+    testWindow.__phone = canvas;
+    const video = canvas.captureStream(20);
+    room.remoteParticipants
+      .get('phone')!
+      .addSubscribedMediaTrack(video.getVideoTracks()[0], 'TR_cam_phone', video);
+  });
+
+  const video = page.locator('[data-identity="phone"][data-shape="lens"] video');
+  const fit = () => video.evaluate((element) => getComputedStyle(element).objectFit);
+  await expect.poll(fit).toBe('contain');
+
+  // Turning the phone sideways matches the lens, which it then fills.
+  await page.evaluate(() => {
+    const canvas = (window as Window & { __phone?: HTMLCanvasElement }).__phone!;
+    canvas.width = 640;
+    canvas.height = 360;
+  });
+  await expect.poll(fit).toBe('cover');
+});

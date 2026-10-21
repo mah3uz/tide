@@ -2,6 +2,7 @@
   import { MicrophoneSlash } from 'phosphor-svelte';
   import { initials, participantColor } from '#lib/ui/participantColor.js';
   import Waveform from '#lib/ui/Waveform.svelte';
+  import { clampAspect, observeAspect } from './aspect';
   import type { ParticipantView } from './media';
   import { attachMediaTrack } from './mediaElement';
   import ParticipantMenu from './ParticipantMenu.svelte';
@@ -45,6 +46,13 @@
     shownShape = shape;
   });
 
+  // A stream shaped unlike its frame (a portrait phone in the landscape lens)
+  // is shown whole: cover would keep only its middle third.
+  let aspect = $state(clampAspect(0, 0));
+  const contain = $derived(
+    rect !== undefined && shape !== 'portal' && aspect >= 1 !== rect.w >= rect.h
+  );
+
   const color = $derived(participantColor(participant.identity));
   const letters = $derived(initials(participant.name));
 </script>
@@ -77,10 +85,12 @@
            and an unmuted <video> can be blocked from autoplaying. -->
       <video
         use:attachMediaTrack={participant.camera}
+        use:observeAspect={(next) => (aspect = next)}
         autoplay
         playsinline
         muted
         class:mirrored={participant.isLocal}
+        class:contain
         aria-label={`${participant.name}'s video`}
       ></video>
     {:else}
@@ -178,6 +188,10 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  video.contain {
+    object-fit: contain;
   }
 
   video.mirrored {
