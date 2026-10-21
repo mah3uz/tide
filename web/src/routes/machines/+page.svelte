@@ -33,6 +33,8 @@
     type PairingInfo
   } from '#lib/api/types.gen.js';
   import { compactAgo, osLabel, shortHash, systemLabel } from '#lib/format.js';
+  import ThemeToggle from '#lib/ui/ThemeToggle.svelte';
+  import Wordmark from '#lib/ui/Wordmark.svelte';
 
   // One route, two jobs (ARCHITECTURE.md §8.1): with ?code= the moil app sent
   // the host here to confirm a pairing; without one it lists their machines.
@@ -45,13 +47,19 @@
   // this page is open, so the list refreshes itself quietly.
   const refreshIntervalMs = 10_000;
 
-  const accentButton =
-    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control border border-accent bg-accent px-2.5 text-[12px] font-[550] text-white no-underline transition-colors hover:border-accent-hover hover:bg-accent-hover disabled:opacity-60';
-  const plainButton =
-    'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control border border-border bg-paper px-2.5 text-[12px] text-ink transition-colors hover:bg-surface-2 disabled:opacity-60';
-  const textButton = 'border-0 bg-transparent p-0 text-[12px] text-accent';
+  const control =
+    'inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-pill border px-4 text-[14px] no-underline transition-colors duration-(--dur-1) disabled:opacity-50 pointer-coarse:h-11';
+  const accentButton = `${control} border-accent bg-accent font-semibold text-on-accent hover:border-accent-hover hover:bg-accent-hover`;
+  const plainButton = `${control} border-line-strong bg-surface-2 font-medium text-ink hover:bg-[color-mix(in_srgb,var(--ink)_7%,var(--surface-2))]`;
+  const textButton =
+    'border-0 bg-transparent p-0 text-[14px] text-accent underline-offset-4 hover:underline pointer-coarse:min-h-11';
   const field =
-    'mono h-7 min-w-0 flex-1 rounded-control border border-border bg-paper px-2 text-[12px] text-ink outline-none focus:border-accent';
+    'mono h-10 min-w-0 flex-1 rounded-sm border border-line-strong bg-surface-2 px-3.5 text-[13px] text-ink outline-none focus:border-accent pointer-coarse:h-11';
+  const card = 'mx-auto mt-10 w-[min(100%,440px)] rounded-lg border border-line bg-surface p-6';
+  const cardTitle = 'm-0 text-[22px] leading-7 font-medium tracking-[-0.02em] text-ink';
+  const cardText = 'm-0 mt-2 text-[14px] text-ink-2';
+  const step =
+    'mono grid size-7 shrink-0 place-items-center rounded-pill bg-surface-2 text-[12px] text-ink-2';
 
   let view = $state<View>('loading');
   let pending = $state<PairingInfo>();
@@ -345,7 +353,7 @@
   function stateDot(machine: MachineInfo): string {
     if (machine.state === MachineIdle || machine.state === MachineBusy) return 'bg-ok';
     if (machine.state === MachinePaused) return 'bg-warn';
-    return 'border border-ink-2 bg-transparent';
+    return 'border border-ink-3 bg-transparent';
   }
 
   onMount(() => {
@@ -365,12 +373,12 @@
 </svelte:head>
 
 {#snippet codeForm(label: string)}
-  <form class="text-[12px] text-ink-2" onsubmit={enterCode}>
+  <form class="text-[13px] text-ink-2" onsubmit={enterCode}>
     <label for="pairing-code-input">{label}</label>
-    <div class="mt-1.5 flex items-center gap-1">
+    <div class="mt-2 flex items-center gap-2">
       <input
         id="pairing-code-input"
-        class="{field} uppercase placeholder:text-ink-2/60"
+        class="{field} uppercase placeholder:text-ink-3"
         bind:value={codeDraft}
         placeholder="XXXX-XXXX"
         maxlength="16"
@@ -384,79 +392,88 @@
   </form>
 {/snippet}
 
-<header class="flex h-12 items-center justify-between border-b border-border px-4">
-  <a class="text-[15px] font-[550] tracking-[0.02em] text-accent no-underline" href="/">tide</a>
-  <a
-    class="inline-flex items-center gap-1 text-[12px] text-ink-2 no-underline transition-colors hover:text-ink"
-    href="/"
+<header
+  class="mx-auto flex w-[min(100%,1212px)] items-center justify-between gap-3 pt-[max(28px,env(safe-area-inset-top))] pr-[max(16px,env(safe-area-inset-right))] pb-7 pl-[max(16px,env(safe-area-inset-left))] max-sm:pt-[max(16px,env(safe-area-inset-top))] max-sm:pb-2"
+>
+  <a class="inline-flex min-h-11 items-center rounded-sm no-underline" href="/"
+    ><Wordmark size={20} /></a
   >
-    <ArrowLeft size={16} weight="regular" aria-hidden="true" /> All rooms
-  </a>
+  <div class="flex items-center gap-2">
+    <ThemeToggle />
+    <a
+      class="inline-flex h-9 items-center gap-1.5 rounded-pill border border-line-strong px-3.5 text-[13px] text-ink no-underline transition-colors duration-(--dur-1) hover:bg-surface-2 pointer-coarse:h-11"
+      href="/"
+    >
+      <ArrowLeft size={16} weight="regular" aria-hidden="true" /> All rooms
+    </a>
+  </div>
 </header>
 
-<main class="mx-auto w-[min(100%,880px)] px-4 py-8">
+<main
+  class="mx-auto w-[min(100%,1212px)] pr-[max(16px,env(safe-area-inset-right))] pb-16 pl-[max(16px,env(safe-area-inset-left))]"
+>
   <p class="sr-only" role="status">{announcement}</p>
 
   {#if view === 'loading'}
-    <p class="m-0 text-[12px] text-ink-2" aria-live="polite">Loading…</p>
+    <p class="m-0 pt-10 text-[13px] text-ink-3" aria-live="polite">Loading…</p>
   {:else if view === 'signed-out'}
-    <section class="mx-auto w-[min(100%,400px)] rounded-card border border-border bg-surface p-4">
-      <h1 id="view-focus" tabindex="-1" class="m-0 text-[15px] font-[550] leading-6 text-ink">
+    <section class={card}>
+      <h1 id="view-focus" tabindex="-1" class={cardTitle}>
         {code ? 'Sign in to pair this machine' : 'Sign in to see your machines'}
       </h1>
-      <p class="m-0 mt-1 text-[12px] text-ink-2">
+      <p class={cardText}>
         {code
           ? 'The machine will belong to the account you sign in with.'
           : 'Machines you pair with tide transcribe your recordings.'}
       </p>
-      <a class="{accentButton} mt-4" href={signInHref} data-sveltekit-reload>
+      <a class="{accentButton} mt-5" href={signInHref} data-sveltekit-reload>
         <SignIn size={16} weight="regular" aria-hidden="true" /> Sign in
       </a>
     </section>
   {:else if view === 'off'}
-    <section class="mx-auto w-[min(100%,400px)] rounded-card border border-border bg-surface p-4">
-      <h1 id="view-focus" tabindex="-1" class="m-0 text-[15px] font-[550] leading-6 text-ink">
+    <section class={card}>
+      <h1 id="view-focus" tabindex="-1" class={cardTitle}>
         Transcripts aren't enabled on this server
       </h1>
-      <p class="m-0 mt-1 text-[12px] text-ink-2">
+      <p class={cardText}>
         Machines can't be paired here. Ask your tide administrator if you need transcripts.
       </p>
     </section>
   {:else if view === 'error'}
-    <div class="rounded-card border border-border bg-surface px-4 py-8 text-center">
+    <div
+      class="mt-10 rounded-lg border border-dashed border-line-strong px-6 py-10 text-center text-[15px]"
+    >
       {#if paired}
-        <p class="m-0 mb-1 text-[13px] text-ink">Paired <bdi>{paired.name}</bdi>.</p>
+        <p class="m-0 mb-1 text-ink">Paired <bdi>{paired.name}</bdi>.</p>
       {/if}
-      <p class="m-0 text-[13px] text-rec" role="alert">{error}</p>
-      <button id="view-focus" class="{textButton} mt-2" type="button" onclick={retry}>
+      <p class="m-0 text-rec-ink" role="alert">{error}</p>
+      <button id="view-focus" class="{plainButton} mt-4" type="button" onclick={retry}>
         Try again
       </button>
     </div>
   {:else if view === 'confirm' && pending}
     <section
-      class="mx-auto w-[min(100%,400px)] rounded-card border border-border bg-surface"
+      class="mx-auto mt-10 w-[min(100%,440px)] rounded-lg border border-line bg-surface"
       aria-labelledby="view-focus"
     >
-      <div class="p-4">
-        <h1 id="view-focus" tabindex="-1" class="m-0 text-[15px] font-[550] leading-6 text-ink">
-          Pair this machine?
-        </h1>
+      <div class="p-6">
+        <h1 id="view-focus" tabindex="-1" class={cardTitle}>Pair this machine?</h1>
         <!-- One check, before anything else: the code alone proves nothing. -->
-        <p class="m-0 mt-1 text-[13px] text-ink" data-testid="moil-address-check">
+        <p class="m-0 mt-2 text-[14px] text-ink" data-testid="moil-address-check">
           Pair only if you just started pairing in the moil app on your own computer, and it shows
           this code and says it is pairing with
           <span class="mono [overflow-wrap:anywhere]">{pending.moil_url}</span>. Otherwise, choose
           Deny.
         </p>
         <div
-          class="mono mt-3 rounded-control border border-border bg-paper py-1.5 text-center text-[18px] leading-7 tracking-[0.16em] text-ink"
+          class="mono mt-4 rounded-sm border border-line-strong bg-surface-2 py-3 text-center text-[24px] leading-8 tracking-[0.16em] text-ink"
           data-testid="pairing-code"
         >
           {pending.code}
         </div>
-        <p id="machine-reported" class="m-0 mt-3 text-[11px] text-ink-2">Reported by the machine</p>
+        <p id="machine-reported" class="m-0 mt-4 text-[12px] text-ink-3">Reported by the machine</p>
         <dl
-          class="m-0 mt-1 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-[12px]"
+          class="m-0 mt-1.5 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-[13px]"
           aria-describedby="machine-reported"
         >
           <dt class="text-ink-2">Name</dt>
@@ -471,26 +488,26 @@
           </dd>
         </dl>
       </div>
-      <div class="border-t border-border p-4">
-        <p class="m-0 text-[12px] text-ink">
+      <div class="border-t border-line p-6">
+        <p class="m-0 text-[13px] text-ink">
           Once paired, it downloads and transcribes every new recording of rooms you own, until you
           unpair it here.
         </p>
         {#if account}
-          <p class="m-0 mt-1 text-[12px] text-ink-2">
+          <p class={cardText}>
             Pairs with your account <span class="text-ink [overflow-wrap:anywhere]">{account}</span
             >.
           </p>
         {/if}
-        {#if error}<p class="m-0 mt-2 text-[12px] text-rec" role="alert">{error}</p>{/if}
-        <div class="mt-4 flex justify-end gap-2">
+        {#if error}<p class="m-0 mt-2 text-[13px] text-rec-ink" role="alert">{error}</p>{/if}
+        <div class="mt-5 flex justify-end gap-2">
           <button type="button" disabled={busy} class={plainButton} onclick={() => void deny()}>
             Deny
           </button>
           <button
             type="button"
             disabled={busy}
-            class="{accentButton} px-3"
+            class="{accentButton} px-6!"
             onclick={() => void confirm()}
           >
             Pair
@@ -499,40 +516,44 @@
       </div>
     </section>
   {:else if view === 'expired'}
-    <section class="mx-auto w-[min(100%,400px)] rounded-card border border-border bg-surface p-4">
-      <h1 id="view-focus" tabindex="-1" class="m-0 text-[15px] font-[550] leading-6 text-ink">
-        This code doesn't work
-      </h1>
-      <p class="m-0 mt-1 text-[12px] text-ink-2">
+    <section class={card}>
+      <h1 id="view-focus" tabindex="-1" class={cardTitle}>This code doesn't work</h1>
+      <p class={cardText}>
         It expired, was already used, or was mistyped. Enter it again, or start pairing again in the
         moil app.
       </p>
-      <div class="mt-3">{@render codeForm('Pairing code')}</div>
-      <button type="button" class="{textButton} mt-3" onclick={showList}>Your machines</button>
+      <div class="mt-5">{@render codeForm('Pairing code')}</div>
+      <button type="button" class="{textButton} mt-4" onclick={showList}>Your machines</button>
     </section>
   {:else if view === 'denied'}
-    <section class="mx-auto w-[min(100%,400px)] rounded-card border border-border bg-surface p-4">
-      <h1 id="view-focus" tabindex="-1" class="m-0 text-[15px] font-[550] leading-6 text-ink">
-        Machine not paired
-      </h1>
-      <p class="m-0 mt-1 text-[12px] text-ink-2">
+    <section class={card}>
+      <h1 id="view-focus" tabindex="-1" class={cardTitle}>Machine not paired</h1>
+      <p class={cardText}>
         You denied <bdi class="text-ink">{deniedName}</bdi>. Nothing was shared with it, and its
         code no longer works.
       </p>
-      <button type="button" class="{textButton} mt-3" onclick={showList}>Your machines</button>
+      <button type="button" class="{textButton} mt-4" onclick={showList}>Your machines</button>
     </section>
   {:else if view === 'list' && data}
-    <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+    <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-5 pt-10 max-sm:pt-5">
       <div class="min-w-0">
-        <h1 id="view-focus" tabindex="-1" class="m-0 text-[18px] font-[550] leading-6 text-ink">
+        <h1
+          id="view-focus"
+          tabindex="-1"
+          class="m-0 text-[64px] leading-none font-medium tracking-[-0.04em] text-ink max-sm:text-[44px]"
+        >
           Machines
         </h1>
-        <p class="m-0 mt-1.5 max-w-[560px] text-[12px] text-ink-2">
+        <p class="m-0 mt-4 max-w-[560px] text-[15px] text-ink-2">
           Machines you pair transcribe your recordings on your own hardware. Your recordings only
           ever go to your own machines.
         </p>
       </div>
-      <a class={accentButton} href={pairHref} title="Opens the moil app on this computer">
+      <a
+        class="{accentButton} h-13! px-6! text-[16px]!"
+        href={pairHref}
+        title="Opens the moil app on this computer"
+      >
         <Plus size={16} weight="regular" aria-hidden="true" /> Add a machine
       </a>
     </div>
@@ -541,7 +562,7 @@
       <div
         id="paired-banner"
         tabindex="-1"
-        class="mt-4 flex items-start gap-2 rounded-card border border-ok/30 bg-ok/10 px-3 py-2 text-[12px] text-ink"
+        class="mt-6 flex items-start gap-2.5 rounded-md border border-ok/30 bg-ok/10 px-5 py-3.5 text-[14px] text-ink"
         role="status"
       >
         <CheckCircle
@@ -559,19 +580,21 @@
       </div>
     {/if}
 
-    {#if error}<p class="m-0 mt-4 text-[12px] text-rec" role="alert">{error}</p>{/if}
+    {#if error}<p class="m-0 mt-4 text-[13px] text-rec-ink" role="alert">{error}</p>{/if}
 
-    <section class="mt-6" aria-labelledby="view-focus">
+    <section class="mt-10" aria-labelledby="view-focus">
       {#if data.machines.length === 0}
         <!-- Onboarding: most hosts have never heard of moil. -->
         <div
-          class="rounded-card border border-border bg-surface px-3 py-3 text-[12px] text-ink"
+          class="rounded-lg border border-line bg-surface p-6 text-[14px] text-ink max-sm:p-5"
           data-testid="onboarding"
         >
-          <p class="m-0 text-[13px] font-[550]">Transcribe on a computer of your own</p>
-          <ol class="m-0 mt-2 grid list-none gap-2 p-0">
-            <li class="flex gap-2">
-              <span class="mono w-4 shrink-0 text-ink-2" aria-hidden="true">1</span>
+          <p class="m-0 text-[18px] font-medium tracking-[-0.01em]">
+            Transcribe on a computer of your own
+          </p>
+          <ol class="m-0 mt-4 grid list-none gap-3 p-0">
+            <li class="flex items-baseline gap-3">
+              <span class={step} aria-hidden="true">1</span>
               <span>
                 Get the moil app on the computer that will transcribe.
                 <a class="text-accent" href={data.app_url} target="_blank" rel="noreferrer"
@@ -579,15 +602,15 @@
                 >
               </span>
             </li>
-            <li class="flex gap-2">
-              <span class="mono w-4 shrink-0 text-ink-2" aria-hidden="true">2</span>
+            <li class="flex items-baseline gap-3">
+              <span class={step} aria-hidden="true">2</span>
               <span>
                 Pair it with tide: choose <strong class="font-[550]">Add a machine</strong> on that computer,
                 or paste the address below into its moil app.
               </span>
             </li>
-            <li class="flex gap-2">
-              <span class="mono w-4 shrink-0 text-ink-2" aria-hidden="true">3</span>
+            <li class="flex items-baseline gap-3">
+              <span class={step} aria-hidden="true">3</span>
               <span>
                 In moil, review and approve the {data.bundle.name} bundle, version
                 <span class="mono">{data.bundle.version}</span>
@@ -597,21 +620,21 @@
           </ol>
         </div>
       {:else}
-        <ul class="m-0 list-none overflow-hidden rounded-card border border-border bg-surface p-0">
+        <ul class="m-0 list-none overflow-hidden rounded-lg border border-line bg-surface p-0">
           {#each data.machines as machine (machine.id)}
             <li
-              class="flex items-start gap-3 border-b border-border px-3 py-2.5 last:border-b-0"
+              class="flex items-start gap-3 border-b border-line px-5 py-4 last:border-b-0 max-sm:px-4"
               data-machine-id={machine.id}
             >
               <span
-                class="mt-[6px] size-2 shrink-0 rounded-full {stateDot(machine)}"
+                class="mt-[8px] size-2 shrink-0 rounded-pill {stateDot(machine)}"
                 aria-hidden="true"
               ></span>
               <div class="min-w-0 flex-1">
-                <div class="text-[13px] text-ink [overflow-wrap:anywhere]">
+                <div class="text-[15px] font-medium text-ink [overflow-wrap:anywhere]">
                   <bdi>{machine.name}</bdi>
                 </div>
-                <div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-ink-2">
+                <div class="mt-1 flex flex-wrap items-center gap-x-1.5 text-[12px] text-ink-2">
                   <span data-testid="machine-state">{stateLabel(machine)}</span>
                   <span aria-hidden="true">·</span>
                   <span><bdi>{osLabel(machine.os)}</bdi></span>
@@ -620,7 +643,7 @@
                 </div>
                 {#if !machine.approved}
                   <p
-                    class="m-0 mt-2 flex items-start gap-1.5 rounded-control bg-surface-2 px-2 py-1.5 text-[12px] text-ink"
+                    class="m-0 mt-3 flex items-start gap-2 rounded-sm bg-surface-2 px-3 py-2.5 text-[13px] text-ink"
                     data-testid="approve-hint"
                   >
                     <Info
@@ -643,10 +666,10 @@
               <button
                 type="button"
                 disabled={busy}
-                class="inline-flex h-6 shrink-0 items-center gap-1 rounded-control border px-2 text-[11px] transition-colors disabled:opacity-60 {unpairID ===
+                class="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-pill border px-3 text-[12px] font-medium transition-colors duration-(--dur-1) disabled:opacity-50 pointer-coarse:h-11 pointer-coarse:min-w-11 {unpairID ===
                 machine.id
-                  ? 'border-rec bg-rec text-white'
-                  : 'border-border bg-paper text-ink-2 hover:bg-surface-2 hover:text-ink'}"
+                  ? 'border-danger bg-danger text-on-danger'
+                  : 'border-line-strong bg-transparent text-ink-2 hover:bg-surface-2 hover:text-ink'}"
                 aria-label={unpairID === machine.id
                   ? `Confirm unpair ${machine.name}`
                   : `Unpair ${machine.name}`}
@@ -667,24 +690,29 @@
 
     <!-- A computer that isn't this one: the deep link above can't reach it,
          so its moil app starts the pairing and shows the code. -->
-    <section class="mt-8" aria-labelledby="pair-another-heading">
+    <section class="mt-14 max-sm:mt-10" aria-labelledby="pair-another-heading">
       <div class="flex flex-wrap items-baseline justify-between gap-x-4">
-        <h2 id="pair-another-heading" class="m-0 text-[13px] font-[550] text-ink">
+        <h2
+          id="pair-another-heading"
+          class="m-0 text-[22px] font-medium tracking-[-0.02em] text-ink"
+        >
           Pair another computer
         </h2>
         {#if data.machines.length > 0}
           <!-- Without a machine yet, the steps above link it. -->
-          <a class="text-[12px] text-accent" href={data.app_url} target="_blank" rel="noreferrer"
+          <a class="text-[14px] text-accent" href={data.app_url} target="_blank" rel="noreferrer"
             >Get moil</a
           >
         {/if}
       </div>
-      <ol class="m-0 mt-2 grid list-none gap-4 p-0 sm:grid-cols-2">
-        <li class="flex min-w-0 gap-2 text-[12px]">
-          <span class="mono w-4 shrink-0 text-ink-2" aria-hidden="true">1</span>
+      <ol class="m-0 mt-4 grid list-none gap-3 p-0 sm:grid-cols-2">
+        <li
+          class="flex min-w-0 gap-3 rounded-lg border border-line bg-surface p-5 text-[13px] max-sm:p-4"
+        >
+          <span class={step} aria-hidden="true">1</span>
           <div class="min-w-0 flex-1 text-ink-2">
             <label for="moil-address">Paste this address into its moil app</label>
-            <div class="mt-1.5 flex items-center gap-1">
+            <div class="mt-2 flex items-center gap-2">
               <input
                 id="moil-address"
                 class={field}
@@ -694,7 +722,7 @@
               />
               <button
                 type="button"
-                class="grid h-7 w-7 shrink-0 place-items-center rounded-control border border-border bg-paper p-0 text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                class="grid size-10 shrink-0 place-items-center rounded-pill border border-line-strong bg-transparent p-0 text-ink-2 transition-colors duration-(--dur-1) hover:bg-surface-2 hover:text-ink pointer-coarse:size-11"
                 aria-label={copied ? 'Address copied' : 'Copy address'}
                 title={copied ? 'Copied' : 'Copy address'}
                 onclick={() => void copyAddress()}
@@ -708,8 +736,10 @@
             </div>
           </div>
         </li>
-        <li class="flex min-w-0 gap-2 text-[12px]">
-          <span class="mono w-4 shrink-0 text-ink-2" aria-hidden="true">2</span>
+        <li
+          class="flex min-w-0 gap-3 rounded-lg border border-line bg-surface p-5 text-[13px] max-sm:p-4"
+        >
+          <span class={step} aria-hidden="true">2</span>
           <div class="min-w-0 flex-1">{@render codeForm('Enter the code it shows')}</div>
         </li>
       </ol>

@@ -28,12 +28,12 @@
   const startInvalid = $derived(Boolean(error) && (!anyMissing || startMissing));
   const endInvalid = $derived(Boolean(error) && (!anyMissing || endMissing));
   const field =
-    'h-7 w-full min-w-0 rounded-control border border-border bg-surface px-2 text-[12px] text-ink outline-none focus:border-accent aria-[invalid=true]:border-rec';
+    'h-11 w-full min-w-0 rounded-sm border border-line-strong bg-surface-2 px-3 text-[14px] text-ink outline-none focus:border-accent aria-[invalid=true]:border-rec';
 </script>
 
 <div class="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_112px_112px]">
-  <label class="col-span-2 grid gap-1 sm:col-span-1" for={`${id}-date`}>
-    <span class="text-[12px] text-ink-2">Date</span>
+  <label class="col-span-2 grid gap-1.5 sm:col-span-1" for={`${id}-date`}>
+    <span class="text-[13px] text-ink-2">Date</span>
     <input
       id={`${id}-date`}
       class={field}
@@ -45,8 +45,8 @@
       data-autofocus={autofocus || undefined}
     />
   </label>
-  <label class="grid gap-1" for={`${id}-start`}>
-    <span class="text-[12px] text-ink-2">Starts</span>
+  <label class="grid gap-1.5" for={`${id}-start`}>
+    <span class="text-[13px] text-ink-2">Starts</span>
     <input
       id={`${id}-start`}
       class={field}
@@ -57,8 +57,8 @@
       aria-describedby={startInvalid ? errorId : undefined}
     />
   </label>
-  <label class="grid gap-1" for={`${id}-end`}>
-    <span class="text-[12px] text-ink-2">Ends</span>
+  <label class="grid gap-1.5" for={`${id}-end`}>
+    <span class="text-[13px] text-ink-2">Ends</span>
     <input
       id={`${id}-end`}
       class={field}
@@ -71,5 +71,5 @@
   </label>
 </div>
 {#if error}
-  <p id={errorId} class="m-0 mt-1 text-[11px] text-rec">{error}</p>
+  <p id={errorId} class="m-0 mt-1.5 text-[12px] text-rec-ink">{error}</p>
 {/if}
