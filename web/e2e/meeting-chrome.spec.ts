@@ -410,3 +410,83 @@ test('names are in the UI font and the clock in mono, and roles are words, not b
     })
   ).toBe(true);
 });
+
+test('beside an open side sheet the capsule keeps to the stage, never under the sheet', async ({
+  page
+}) => {
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  const bar = page.getByRole('navigation', { name: 'Meeting controls' });
+  const sheet = page.getByRole('complementary', { name: 'People' });
+
+  // The host's full capsule is wider than the room a narrow tablet leaves
+  // beside the sheet; it tightens, then drops to the everyday controls.
+  for (const width of [640, 700, 820, 900, 1000, 1099, 1180]) {
+    await page.setViewportSize({ width, height: 800 });
+    if (!(await sheet.count())) await page.getByRole('button', { name: 'Open people' }).click();
+    await settled(sheet);
+    await settled(bar.locator('..'));
+    const capsule = (await bar.boundingBox())!;
+    const panel = (await sheet.boundingBox())!;
+    const where = `at ${width}px the capsule spans x ${capsule.x}..${capsule.x + capsule.width}`;
+    expect(capsule.x, where).toBeGreaterThanOrEqual(0);
+    expect(capsule.x + capsule.width, where).toBeLessThanOrEqual(panel.x);
+    // Microphone, camera, people, chat and leave are always there.
+    for (const name of ['Unmute microphone', 'Turn camera on', 'Close people', 'Open chat']) {
+      await expect(bar.getByRole('button', { name, exact: true }), where).toBeVisible();
+    }
+    await expect(bar.getByRole('button', { name: 'Leave or end meeting' }), where).toBeVisible();
+  }
+});
+
+test('on a phone a chat peek never covers the strip’s faces or names', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  await page.evaluate(() => {
+    type TestRoom = {
+      handleParticipantUpdates(infos: unknown[]): void;
+      remoteParticipants: Map<string, unknown>;
+      emit(event: string, ...args: unknown[]): boolean;
+    };
+    const room = (window as Window & { __tideRoom?: TestRoom }).__tideRoom!;
+    room.handleParticipantUpdates(
+      ['Aisha Rahman', 'Tom Becker', 'Mei Lin'].map((name, index) => ({
+        sid: `PA_${index}`,
+        identity: `remote-${index}`,
+        name,
+        state: 2,
+        metadata: '',
+        attributes: {},
+        kind: 0,
+        version: 1,
+        joinedAt: 0n,
+        dataTracks: [],
+        permission: { canSubscribe: true, canPublish: true, canPublishData: true },
+        tracks: []
+      }))
+    );
+    const payload = new TextEncoder().encode(
+      JSON.stringify({ text: 'Can everyone see the roadmap?', ts: Date.now() })
+    );
+    room.emit('dataReceived', payload, room.remoteParticipants.get('remote-2'), 0, 'chat');
+  });
+
+  const peek = page.getByTestId('chat-peek');
+  await settled(peek);
+  const peekBox = (await peek.boundingBox())!;
+  const capsule = (await page.getByRole('navigation', { name: 'Meeting controls' }).boundingBox())!;
+  expect(peekBox.y + peekBox.height).toBeLessThanOrEqual(capsule.y);
+  const portals = page.locator('[data-testid="participant-tile"][data-shape="portal"]');
+  await expect(portals).toHaveCount(3);
+  for (const portal of await portals.all()) {
+    expect(overlaps(peekBox, (await portal.boundingBox())!)).toBe(false);
+    // A name under the peek is put away while it shows, not covered.
+    const label = portal.locator('.portal-label');
+    if (overlaps(peekBox, (await label.boundingBox())!)) {
+      await expect(label).toHaveCSS('opacity', '0');
+    }
+  }
+});
