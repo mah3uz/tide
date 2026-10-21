@@ -39,7 +39,10 @@ async function enter(page: Page, guestName?: string): Promise<void> {
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
   }
   await page.getByRole('button', { name: 'Join meeting' }).click();
-  await expect(page.getByRole('button', { name: 'Share screen' })).toBeVisible({ timeout: 20_000 });
+  // The capsule, not Share screen: a phone has no screen share in it.
+  await expect(page.getByRole('navigation', { name: 'Meeting controls' })).toBeVisible({
+    timeout: 20_000
+  });
 }
 
 function controlLabels(page: Page): Promise<string[]> {
@@ -64,7 +67,7 @@ test('a host has microphone and camera side by side, and record after screen sha
     'Choose camera',
     'Share screen',
     'Start recording',
-    'Speaker view',
+    'Grid view',
     'Open people',
     'Open chat',
     'Leave or end meeting'
@@ -90,7 +93,7 @@ test('a guest has microphone and camera in the same place as a host, and no reco
     'Turn camera on',
     'Choose camera',
     'Share screen',
-    'Speaker view',
+    'Grid view',
     'Open people',
     'Open chat',
     'Leave room'
@@ -107,7 +110,7 @@ test('a long name stays on one line and keeps "(You)" inside a phone-width tile'
 
   const tile = page.locator('[data-testid="participant-tile"]').first();
   const label = tile.locator('.name-label');
-  const box = await tile.locator('.video-box').boundingBox();
+  const box = await tile.boundingBox();
   const name = await label.locator('.name').boundingBox();
   const you = await label.getByText('(You)').boundingBox();
   expect(box && name && you).toBeTruthy();
@@ -223,6 +226,13 @@ async function expectInside(locator: Locator, slack = 0): Promise<void> {
   expect(y >= 0 && y + height <= phone.height, where).toBe(true);
 }
 
+/** Waits out a sheet's slide-in, so it is measured where it comes to rest. */
+async function settled(locator: Locator): Promise<void> {
+  await locator.evaluate((element) =>
+    Promise.all(element.getAnimations().map((animation) => animation.finished))
+  );
+}
+
 function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
@@ -288,45 +298,58 @@ test('on a phone the header keeps every chip on screen and clears the panels', a
   const media = (await page.getByRole('region', { name: 'Meeting participants' }).boundingBox())!;
   expect(header.y + header.height).toBeLessThanOrEqual(media.y);
 
-  // An open panel starts below the whole header, second row included.
+  // On a phone an open panel is a bottom sheet: it rises from the bottom edge,
+  // full width, and leaves the top of the screen showing above it.
   await page.getByRole('button', { name: 'Open people' }).click();
+  await settled(page.getByRole('complementary', { name: 'People' }));
   const panel = (await page.getByRole('complementary', { name: 'People' }).boundingBox())!;
-  for (const box of boxes) expect(panel.y).toBeGreaterThanOrEqual(box.y + box.height);
+  expect(panel.x).toBe(0);
+  expect(panel.width).toBe(phone.width);
+  expect(Math.round(panel.y + panel.height)).toBe(phone.height);
+  expect(panel.y).toBeGreaterThanOrEqual(phone.height * 0.15 - 1);
+  // Its close button, and a tap on the dimmed stage, put it away again.
+  await page
+    .getByRole('complementary', { name: 'People' })
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await expect(page.getByRole('complementary', { name: 'People' })).toBeHidden();
 });
 
-test('on a phone the confirm steps and device menus open on screen', async ({ page }) => {
+test('on a phone the capsule keeps the everyday controls and More holds the rest', async ({
+  page
+}) => {
   await page.setViewportSize(phone);
   await mockApi(page, state());
   await fakeSfu(page);
   await enter(page);
   const bar = page.getByRole('navigation', { name: 'Meeting controls' });
 
-  // Record? opens its choice above the bar, with a confirm of its own.
-  await page.getByRole('button', { name: 'Start recording' }).click();
-  await expectInside(page.getByRole('button', { name: 'Record?' }), 8);
-  const recordNow = page.getByRole('button', { name: 'Record', exact: true });
-  const withVideo = page.getByLabel('Also record video');
+  // Six round controls across the width; record, the view and the device
+  // lists are one tap further, in More.
+  expect(await controlLabels(page)).toEqual([
+    'Unmute microphone',
+    'Turn camera on',
+    'Open people',
+    'Open chat',
+    'More controls',
+    'Leave or end meeting'
+  ]);
+  await expectInside(bar, 8);
+
+  const more = page.getByRole('button', { name: 'More controls' });
+  const sheet = page.getByRole('dialog', { name: 'More controls' });
+  await more.click();
+  await expect(sheet).toBeVisible();
+  await settled(sheet);
+  await expectInside(sheet);
+
+  // Record? asks first, inside the sheet, with a confirm of its own.
+  await sheet.getByRole('button', { name: 'Start recording' }).click();
+  await expectInside(sheet.getByRole('button', { name: 'Record?' }));
+  const recordNow = sheet.getByRole('button', { name: 'Record', exact: true });
+  const withVideo = sheet.getByLabel('Also record video');
   await expectInside(recordNow);
   await expectInside(withVideo);
-  await expectInside(bar, 8);
-  await page.keyboard.press('Escape');
-  await expect(withVideo).toBeHidden();
-
-  // They all open in the same place, so opening one closes the others.
-  await page.getByRole('button', { name: 'Start recording' }).click();
-  await expect(withVideo).toBeVisible();
-  await page.getByRole('button', { name: 'Choose microphone' }).click();
-  await expect(page.getByRole('menu', { name: 'Choose microphone' })).toBeVisible();
-  await expect(withVideo).toBeHidden();
-  await page.getByRole('button', { name: 'Leave or end meeting' }).click();
-  await expect(page.getByRole('button', { name: 'End meeting for all' })).toBeVisible();
-  await expect(page.getByRole('menu', { name: 'Choose microphone' })).toBeHidden();
-  await page.getByRole('button', { name: 'Start recording' }).click();
-  await expect(withVideo).toBeVisible();
-  await expect(page.getByRole('button', { name: 'End meeting for all' })).toBeHidden();
-  await page.keyboard.press('Escape');
-
-  await page.getByRole('button', { name: 'Start recording' }).click();
   await withVideo.check();
   const [start] = await Promise.all([
     page.waitForRequest((request) => request.url().endsWith('/api/rooms/standup/recording/start')),
@@ -335,37 +358,48 @@ test('on a phone the confirm steps and device menus open on screen', async ({ pa
   expect(start.postDataJSON()).toEqual({ video: true });
   await expect(withVideo).toBeHidden();
 
+  // Both device lists are in the sheet, on screen, without a menu to open.
+  for (const kind of ['microphone', 'camera']) {
+    await expectInside(sheet.getByRole('menu', { name: `Choose ${kind}` }));
+  }
+
+  // Escape puts the sheet away; so does a tap on the dimmed stage.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await more.click();
+  await expect(sheet).toBeVisible();
+  await page.mouse.click(phone.width / 2, 40);
+  await expect(sheet).toBeHidden();
+
+  // Leave's choice opens above the capsule, on screen.
   await page.getByRole('button', { name: 'Leave or end meeting' }).click();
   await expectInside(page.getByRole('button', { name: 'Leave room' }));
   await expectInside(page.getByRole('button', { name: 'End meeting for all' }));
   await expectInside(bar, 8);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'End meeting for all' })).toBeHidden();
-
-  for (const kind of ['microphone', 'camera']) {
-    await page.getByRole('button', { name: `Choose ${kind}` }).click();
-    await expectInside(page.getByRole('menu', { name: `Choose ${kind}` }));
-    await page.keyboard.press('Escape');
-  }
 });
 
-test('names and the clock are in Inter, and roles are words, not badges', async ({ page }) => {
+test('names are in the UI font and the clock in mono, and roles are words, not badges', async ({
+  page
+}) => {
   await mockApi(page, state());
   await fakeSfu(page, { metadata: '{"role":"host"}' });
   await enter(page);
 
-  const inter = (locator: Locator) =>
+  const family = (locator: Locator) =>
     locator.evaluate((element) => getComputedStyle(element).fontFamily.split(',')[0].trim());
-  expect(await inter(page.getByTestId('stage-clock'))).toMatch(/Inter/);
+  expect(await family(page.getByTestId('stage-clock'))).toMatch(/JetBrains Mono/);
 
   const tile = page.locator('[data-testid="participant-tile"]').first();
   await expect(tile).toContainText('Ada Host (You)');
-  expect(await inter(tile.getByText('(You)'))).toMatch(/Inter/);
+  expect(await family(tile.getByText('(You)'))).toMatch(/Space Grotesk/);
   await expect(tile).not.toContainText('YOU');
 
   await page.getByRole('button', { name: /people/i }).click();
   const row = page.locator('.participant-row').first();
   await expect(row).toContainText('Ada Host (You)');
+  expect(await family(row.getByText('Ada Host', { exact: true }))).toMatch(/Space Grotesk/);
   const role = row.getByText('Meeting host', { exact: true });
   await expect(role).toBeVisible();
   // Secondary text, with no pill around it.

@@ -97,46 +97,44 @@
   .details-trigger {
     display: grid;
     flex: none;
-    width: var(--control-height);
-    height: var(--control-height);
+    width: 32px;
+    height: 32px;
     padding: 0;
     place-items: center;
-    color: var(--text-2);
+    color: var(--ink-2);
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-control);
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
     transition:
-      color var(--motion-fast),
-      background var(--motion-fast),
-      border-color var(--motion-fast);
+      color var(--dur-1) var(--ease-out),
+      background-color var(--dur-1) var(--ease-out);
   }
 
   .details-trigger:hover,
   .details-trigger[aria-expanded='true'] {
-    color: var(--text);
-    background: var(--panel-2);
-    border-color: var(--border-d);
+    color: var(--ink);
+    background: var(--surface-2);
   }
 
   .copy {
     display: inline-flex;
     justify-self: start;
     align-items: center;
-    gap: 6px;
-    height: var(--control-height);
-    padding: 0 10px;
-    color: var(--text);
+    gap: 8px;
+    height: 36px;
+    padding: 0 14px;
+    color: var(--ink);
     font: inherit;
-    background: var(--panel-2);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-control);
-    transition:
-      background var(--motion-fast),
-      border-color var(--motion-fast);
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--surface-2);
+    border: 0;
+    border-radius: var(--r-pill);
+    transition: background-color var(--dur-1) var(--ease-out);
   }
 
   .copy:hover {
-    border-color: var(--text-2);
+    background: color-mix(in srgb, var(--ink) 8%, var(--surface-2));
   }
 
   .copy.done {
@@ -145,18 +143,17 @@
 
   .details {
     /* bits-ui lifts its floating wrapper to the content's z-index: above
-       tiles, side panels (15) and the control bar (20). */
+       tiles, side sheets and the control capsule. */
     position: relative;
-    z-index: 30;
+    z-index: 40;
     display: grid;
-    gap: 8px;
-    width: min(300px, calc(100vw - 24px));
-    padding: 12px;
-    color: var(--text);
-    background: var(--panel);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-card);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+    gap: 10px;
+    width: min(320px, calc(100vw - 24px));
+    padding: 16px;
+    color: var(--ink);
+    background: var(--surface);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-float);
   }
 
   .details:focus {
@@ -165,7 +162,7 @@
 
   .details-label {
     margin: 0;
-    color: var(--text-2);
+    color: var(--ink-3);
     font-size: 12px;
     line-height: 16px;
   }
@@ -173,15 +170,17 @@
   /* The whole link, wrapped where it must: a link cut off by an ellipsis
      can't be read or checked before it is shared. */
   .link {
-    color: var(--text);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 13px;
     overflow-wrap: anywhere;
     user-select: all;
   }
 
   .details-error {
     margin: 0;
-    color: var(--text-2);
-    font-size: 11px;
+    color: var(--ink-2);
+    font-size: 12px;
     line-height: 16px;
   }
 

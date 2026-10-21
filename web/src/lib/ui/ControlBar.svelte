@@ -3,6 +3,7 @@
     CaretUp,
     ChatTeardropText,
     Check,
+    DotsThree,
     GridFour,
     Microphone,
     MicrophoneSlash,
@@ -17,6 +18,7 @@
     VideoCameraSlash,
     X
   } from 'phosphor-svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import type { RoomState } from '#lib/rtc/room.svelte.js';
   import { endMeeting, startRecording, stopRecording } from '#lib/api/client.js';
 
@@ -51,6 +53,14 @@
 
   type DeviceMenuKind = 'audioinput' | 'videoinput';
 
+  // A phone's capsule keeps the everyday controls; record, the view and the
+  // device lists move to the More sheet.
+  const phone = new MediaQuery('(max-width: 639.98px)');
+  // Phones and iPads have no screen capture to offer: no button at all.
+  const canShareScreen =
+    typeof navigator !== 'undefined' &&
+    typeof navigator.mediaDevices?.getDisplayMedia === 'function';
+
   let recordingConfirm = $state(false);
   let recordingBusy = $state(false);
   let recordingError = $state('');
@@ -59,6 +69,18 @@
   let endBusy = $state(false);
   let endError = $state('');
   let deviceMenu = $state<DeviceMenuKind | ''>('');
+  let moreOpen = $state(false);
+
+  $effect(() => {
+    if (!phone.current) moreOpen = false;
+  });
+
+  function closeAll(): void {
+    deviceMenu = '';
+    recordingConfirm = false;
+    leaveConfirm = false;
+    moreOpen = false;
+  }
 
   async function toggleDeviceMenu(kind: DeviceMenuKind): Promise<void> {
     if (deviceMenu === kind) {
@@ -66,19 +88,24 @@
       return;
     }
     await rtc.refreshDevices().catch(() => undefined);
-    // On a phone every menu and confirm step opens in the same place above
-    // the bar, so opening one closes the others.
+    // Every menu and confirm step is a popover over the capsule, so opening
+    // one closes the others.
     recordingConfirm = false;
     leaveConfirm = false;
     deviceMenu = kind;
   }
 
+  function toggleMore(): void {
+    const open = !moreOpen;
+    closeAll();
+    moreOpen = open;
+    if (open) void rtc.refreshDevices().catch(() => undefined);
+  }
+
   function toggleLeave(): void {
-    leaveConfirm = !leaveConfirm;
-    if (leaveConfirm) {
-      deviceMenu = '';
-      recordingConfirm = false;
-    }
+    const open = !leaveConfirm;
+    closeAll();
+    leaveConfirm = open;
   }
 
   function pickDevice(kind: DeviceMenuKind, deviceId: string): void {
@@ -92,7 +119,7 @@
     onleave();
   }
 
-  // One notice at a time above the bar. What the user just did here
+  // One notice at a time above the capsule. What the user just did here
   // (recording, ending) outranks a device problem, which stays until fixed.
   const notice = $derived(recordingError || endError || rtc.mediaError?.message || '');
 
@@ -145,12 +172,13 @@
   }
 </script>
 
-{#snippet deviceMenuList(kind: DeviceMenuKind, fallbackLabel: string)}
+{#snippet deviceMenuList(kind: DeviceMenuKind, fallbackLabel: string, inline: boolean)}
   <!-- The stopPropagation shield keeps the window click-away handler from
        closing the menu; keyboard interaction lives on the options. -->
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
   <div
     class="device-menu"
+    class:inline
     role="menu"
     aria-label={`Choose ${fallbackLabel.toLowerCase()}`}
     onclick={(event) => event.stopPropagation()}
@@ -165,7 +193,7 @@
       >
         <span class="device-name">{device.label || `${fallbackLabel} ${index + 1}`}</span>
         {#if rtc.activeDeviceIds[kind] === device.deviceId}
-          <Check size={12} weight="bold" aria-hidden="true" />
+          <Check size={16} weight="regular" aria-hidden="true" />
         {/if}
       </button>
     {:else}
@@ -174,96 +202,11 @@
   </div>
 {/snippet}
 
-<svelte:window
-  onclick={() => {
-    deviceMenu = '';
-    recordingConfirm = false;
-    leaveConfirm = false;
-  }}
-  onkeydown={(event) => {
-    if (event.key === 'Escape') {
-      deviceMenu = '';
-      recordingConfirm = false;
-      leaveConfirm = false;
-    }
-  }}
-/>
-
-<nav class="control-bar" aria-label="Meeting controls">
-  <div class="control-group">
-    <button
-      type="button"
-      class:off={!rtc.micEnabled}
-      aria-label={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-      aria-pressed={rtc.micEnabled}
-      aria-busy={rtc.mediaBusy.microphone}
-      title={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-      onclick={() => void rtc.toggleMic()}
-    >
-      {#if rtc.micEnabled}
-        <Microphone size={16} weight="regular" aria-hidden="true" />
-      {:else}
-        <MicrophoneSlash size={16} weight="regular" aria-hidden="true" />
-      {/if}
-    </button>
-    <button
-      type="button"
-      class="caret"
-      class:active={deviceMenu === 'audioinput'}
-      aria-label="Choose microphone"
-      aria-haspopup="menu"
-      aria-expanded={deviceMenu === 'audioinput'}
-      title="Choose microphone"
-      onclick={(event) => {
-        event.stopPropagation();
-        void toggleDeviceMenu('audioinput');
-      }}
-    >
-      <CaretUp size={10} weight="bold" aria-hidden="true" />
-    </button>
-    {#if deviceMenu === 'audioinput'}
-      {@render deviceMenuList('audioinput', 'Microphone')}
-    {/if}
-  </div>
-
-  <div class="control-group">
-    <button
-      type="button"
-      class:off={!rtc.camEnabled}
-      aria-label={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
-      aria-pressed={rtc.camEnabled}
-      aria-busy={rtc.mediaBusy.camera}
-      title={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
-      onclick={() => void rtc.toggleCam()}
-    >
-      {#if rtc.camEnabled}
-        <VideoCamera size={16} weight="regular" aria-hidden="true" />
-      {:else}
-        <VideoCameraSlash size={16} weight="regular" aria-hidden="true" />
-      {/if}
-    </button>
-    <button
-      type="button"
-      class="caret"
-      class:active={deviceMenu === 'videoinput'}
-      aria-label="Choose camera"
-      aria-haspopup="menu"
-      aria-expanded={deviceMenu === 'videoinput'}
-      title="Choose camera"
-      onclick={(event) => {
-        event.stopPropagation();
-        void toggleDeviceMenu('videoinput');
-      }}
-    >
-      <CaretUp size={10} weight="bold" aria-hidden="true" />
-    </button>
-    {#if deviceMenu === 'videoinput'}
-      {@render deviceMenuList('videoinput', 'Camera')}
-    {/if}
-  </div>
-
+{#snippet shareButton(labelled: boolean)}
   <button
     type="button"
+    class="round well"
+    class:labelled
     class:active={rtc.screenShareEnabled}
     aria-label={rtc.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
     aria-pressed={rtc.screenShareEnabled}
@@ -271,97 +214,210 @@
     title={rtc.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
     onclick={() => void rtc.toggleScreenShare()}
   >
-    <Screencast size={16} weight="regular" aria-hidden="true" />
+    <Screencast size={20} weight="regular" aria-hidden="true" />
+    {#if labelled}<span>{rtc.screenShareEnabled ? 'Stop sharing' : 'Share screen'}</span>{/if}
   </button>
+{/snippet}
 
-  {#if canRecord}
-    <!-- The stopPropagation shield keeps the window click-away handler from
-         collapsing the confirm state; interaction lives on the controls. -->
-    <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-    <div class="record-group" onclick={(event) => event.stopPropagation()}>
-      <button
-        type="button"
-        class="record-control"
-        class:recording={rtc.isRecording}
-        class:confirm={recordingConfirm}
-        disabled={recordingBusy}
-        aria-label={rtc.isRecording
-          ? 'Stop recording'
-          : recordingConfirm
-            ? 'Record?'
-            : 'Start recording'}
-        aria-pressed={rtc.isRecording}
-        title={rtc.isRecording ? 'Stop recording' : 'Start recording'}
-        onclick={() => void toggleRecording()}
-      >
-        <Record size={16} weight="regular" aria-hidden="true" />
-        {#if recordingConfirm}<span>Record?</span>{/if}
-      </button>
-      {#if recordingConfirm}
-        <div class="record-confirm">
-          <!-- On a phone the bar's button has no room for "Record?", so the
-               choice opens above the bar with its own confirm. -->
-          <button
-            type="button"
-            class="record-now"
-            disabled={recordingBusy}
-            onclick={() => void toggleRecording()}
-          >
-            <Record size={16} weight="regular" aria-hidden="true" />
-            <span>Record</span>
-          </button>
-          <label class="record-video">
-            <input type="checkbox" bind:checked={recordVideo} />
-            Also record video
-          </label>
-        </div>
+{#snippet recordGroup(labelled: boolean)}
+  <!-- The stopPropagation shield keeps the window click-away handler from
+       collapsing the confirm step; interaction lives on the controls. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div class="record-group" class:labelled onclick={(event) => event.stopPropagation()}>
+    <button
+      type="button"
+      class="round well record-control"
+      class:labelled
+      class:recording={rtc.isRecording}
+      class:confirm={recordingConfirm}
+      disabled={recordingBusy}
+      aria-label={rtc.isRecording
+        ? 'Stop recording'
+        : recordingConfirm
+          ? 'Record?'
+          : 'Start recording'}
+      aria-pressed={rtc.isRecording}
+      title={rtc.isRecording ? 'Stop recording' : 'Start recording'}
+      onclick={() => void toggleRecording()}
+    >
+      <Record size={20} weight={rtc.isRecording ? 'fill' : 'regular'} aria-hidden="true" />
+      {#if labelled}
+        <span>{rtc.isRecording ? 'Stop recording' : recordingConfirm ? 'Record?' : 'Record'}</span>
       {/if}
-    </div>
-  {/if}
+    </button>
+    {#if recordingConfirm}
+      <div class="record-confirm" class:popover={!labelled}>
+        <label class="record-video">
+          <input type="checkbox" bind:checked={recordVideo} />
+          Also record video
+        </label>
+        <button
+          type="button"
+          class="record-now"
+          disabled={recordingBusy}
+          onclick={() => void toggleRecording()}
+        >
+          <Record size={16} weight="fill" aria-hidden="true" />
+          <span>Record</span>
+        </button>
+      </div>
+    {/if}
+  </div>
+{/snippet}
 
-  <span class="separator" aria-hidden="true"></span>
-
+{#snippet viewButton(labelled: boolean)}
   <button
     type="button"
+    class="round"
+    class:labelled
     aria-label={view === 'grid' ? 'Speaker view' : 'Grid view'}
     aria-pressed={view === 'speaker'}
     title={view === 'grid' ? 'Speaker view' : 'Grid view'}
     onclick={ontoggleview}
   >
     {#if view === 'grid'}
-      <UserRectangle size={16} weight="regular" aria-hidden="true" />
+      <UserRectangle size={20} weight="regular" aria-hidden="true" />
     {:else}
-      <GridFour size={16} weight="regular" aria-hidden="true" />
+      <GridFour size={20} weight="regular" aria-hidden="true" />
     {/if}
+    {#if labelled}<span>{view === 'grid' ? 'Speaker view' : 'Grid view'}</span>{/if}
   </button>
+{/snippet}
+
+<svelte:window
+  onclick={closeAll}
+  onkeydown={(event) => {
+    if (event.key === 'Escape') closeAll();
+  }}
+/>
+
+<nav class="capsule" aria-label="Meeting controls">
+  <div class="split" class:primary={rtc.micEnabled} class:off={!rtc.micEnabled}>
+    <button
+      type="button"
+      class="round"
+      aria-label={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+      aria-pressed={rtc.micEnabled}
+      aria-busy={rtc.mediaBusy.microphone}
+      title={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+      onclick={() => void rtc.toggleMic()}
+    >
+      {#if rtc.micEnabled}
+        <Microphone size={20} weight="regular" aria-hidden="true" />
+      {:else}
+        <MicrophoneSlash size={20} weight="regular" aria-hidden="true" />
+      {/if}
+    </button>
+    {#if !phone.current}
+      <button
+        type="button"
+        class="caret"
+        aria-label="Choose microphone"
+        aria-haspopup="menu"
+        aria-expanded={deviceMenu === 'audioinput'}
+        title="Choose microphone"
+        onclick={(event) => {
+          event.stopPropagation();
+          void toggleDeviceMenu('audioinput');
+        }}
+      >
+        <CaretUp size={14} weight="bold" aria-hidden="true" />
+      </button>
+      {#if deviceMenu === 'audioinput'}
+        {@render deviceMenuList('audioinput', 'Microphone', false)}
+      {/if}
+    {/if}
+  </div>
+
+  <div class="split well" class:off={!rtc.camEnabled}>
+    <button
+      type="button"
+      class="round"
+      aria-label={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
+      aria-pressed={rtc.camEnabled}
+      aria-busy={rtc.mediaBusy.camera}
+      title={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
+      onclick={() => void rtc.toggleCam()}
+    >
+      {#if rtc.camEnabled}
+        <VideoCamera size={20} weight="regular" aria-hidden="true" />
+      {:else}
+        <VideoCameraSlash size={20} weight="regular" aria-hidden="true" />
+      {/if}
+    </button>
+    {#if !phone.current}
+      <button
+        type="button"
+        class="caret"
+        aria-label="Choose camera"
+        aria-haspopup="menu"
+        aria-expanded={deviceMenu === 'videoinput'}
+        title="Choose camera"
+        onclick={(event) => {
+          event.stopPropagation();
+          void toggleDeviceMenu('videoinput');
+        }}
+      >
+        <CaretUp size={14} weight="bold" aria-hidden="true" />
+      </button>
+      {#if deviceMenu === 'videoinput'}
+        {@render deviceMenuList('videoinput', 'Camera', false)}
+      {/if}
+    {/if}
+  </div>
+
+  {#if !phone.current}
+    {#if canShareScreen}{@render shareButton(false)}{/if}
+    {#if canRecord}{@render recordGroup(false)}{/if}
+    <span class="separator" aria-hidden="true"></span>
+    {@render viewButton(false)}
+  {/if}
 
   <button
     type="button"
-    class="panel-control"
+    class="round"
     class:active={peopleOpen}
     aria-label={peopleOpen ? 'Close people' : 'Open people'}
     aria-pressed={peopleOpen}
     title={peopleOpen ? 'Close people' : 'Open people'}
     onclick={ontogglepeople}
   >
-    <UsersThree size={16} weight="regular" aria-hidden="true" />
-    <span class="badge mono">{rtc.participants.length}</span>
+    <UsersThree size={20} weight="regular" aria-hidden="true" />
+    <span class="badge">{rtc.participants.length}</span>
   </button>
 
   <button
     type="button"
-    class="panel-control"
+    class="round"
     class:active={chatOpen}
     aria-label={chatOpen ? 'Close chat' : 'Open chat'}
     aria-pressed={chatOpen}
     title={chatOpen ? 'Close chat' : 'Open chat'}
     onclick={ontogglechat}
   >
-    <ChatTeardropText size={16} weight="regular" aria-hidden="true" />
-    {#if unreadChat > 0}<span class="badge unread mono">{unreadChat}</span>{/if}
+    <ChatTeardropText size={20} weight="regular" aria-hidden="true" />
+    {#if unreadChat > 0}<span class="badge unread">{unreadChat}</span>{/if}
   </button>
 
-  <span class="separator" aria-hidden="true"></span>
+  {#if phone.current}
+    <button
+      type="button"
+      class="round"
+      class:active={moreOpen}
+      aria-label="More controls"
+      aria-haspopup="dialog"
+      aria-expanded={moreOpen}
+      title="More controls"
+      onclick={(event) => {
+        event.stopPropagation();
+        toggleMore();
+      }}
+    >
+      <DotsThree size={20} weight="bold" aria-hidden="true" />
+    </button>
+  {:else}
+    <span class="separator" aria-hidden="true"></span>
+  {/if}
 
   {#if notice}
     <div class="bar-notice" class:raised={leaveConfirm || recordingConfirm}>
@@ -380,28 +436,23 @@
 
   {#if canManage}
     <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-    <div
-      class="leave-group"
-      class:confirming={leaveConfirm}
-      onclick={(event) => event.stopPropagation()}
-    >
-      <!-- In place of the choices on a wide bar; it stays as their anchor on
-           a phone, where the choices open above the bar. -->
+    <div class="leave-group" onclick={(event) => event.stopPropagation()}>
       <button
         type="button"
-        class="leave toggle"
+        class="leave"
         aria-label="Leave or end meeting"
         aria-expanded={leaveConfirm}
         title="Leave"
         onclick={toggleLeave}
       >
-        <PhoneDisconnect size={16} weight="regular" aria-hidden="true" />
+        <PhoneDisconnect size={20} weight="regular" aria-hidden="true" />
+        <span class="leave-text">Leave</span>
       </button>
       {#if leaveConfirm}
         <div class="leave-choices">
           <button
             type="button"
-            class="leave expanded"
+            class="choice"
             aria-label="Leave room"
             title="Leave room"
             onclick={() => void leave()}
@@ -411,7 +462,7 @@
           </button>
           <button
             type="button"
-            class="end-all"
+            class="choice end-all"
             disabled={endBusy}
             aria-label="End meeting for all"
             title="End meeting for all"
@@ -431,75 +482,71 @@
       title="Leave room"
       onclick={() => void leave()}
     >
-      <PhoneDisconnect size={16} weight="regular" aria-hidden="true" />
+      <PhoneDisconnect size={20} weight="regular" aria-hidden="true" />
+      <span class="leave-text">Leave</span>
     </button>
   {/if}
 </nav>
 
+{#if phone.current && moreOpen}
+  <div class="scrim" aria-hidden="true"></div>
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div
+    class="more-sheet"
+    role="dialog"
+    tabindex="-1"
+    aria-label="More controls"
+    onclick={(event) => event.stopPropagation()}
+  >
+    <span class="handle" aria-hidden="true"></span>
+    <div class="sheet-actions">
+      {#if canShareScreen}{@render shareButton(true)}{/if}
+      {#if canRecord}{@render recordGroup(true)}{/if}
+      {@render viewButton(true)}
+    </div>
+    <section class="sheet-devices">
+      <h3>Microphone</h3>
+      {@render deviceMenuList('audioinput', 'Microphone', true)}
+    </section>
+    <section class="sheet-devices">
+      <h3>Camera</h3>
+      {@render deviceMenuList('videoinput', 'Camera', true)}
+    </section>
+  </div>
+{/if}
+
 <style>
-  .control-bar {
-    position: fixed;
-    z-index: 20;
-    bottom: 16px;
-    left: 50%;
+  .capsule {
+    --btn: 52px;
+
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px;
-    background: var(--panel);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-card);
-    transform: translateX(-50%);
+    padding: 10px;
+    pointer-events: auto;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    border-radius: var(--r-pill);
+    box-shadow: var(--shadow-float);
   }
 
   button {
-    display: grid;
-    width: var(--control-height);
-    height: var(--control-height);
+    position: relative;
+    display: inline-grid;
+    flex: none;
     padding: 0;
     place-items: center;
-    color: var(--text);
+    color: var(--ink-2);
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-control);
+    border: 0;
+    border-radius: var(--r-pill);
     transition:
-      color var(--motion-fast),
-      background var(--motion-fast),
-      border-color var(--motion-fast);
+      color var(--dur-1) var(--ease-out),
+      background-color var(--dur-1) var(--ease-out);
   }
 
   button:hover {
-    background: var(--panel-2);
-    border-color: var(--border-d);
-  }
-
-  button:focus-visible {
-    outline-color: var(--accent-d);
-  }
-
-  button.off {
-    color: var(--rec);
-    background: color-mix(in srgb, var(--rec) 10%, transparent);
-  }
-
-  button.active {
-    color: var(--accent-d);
-    background: color-mix(in srgb, var(--accent-d) 12%, transparent);
-  }
-
-  button.record-control.recording {
-    color: white;
-    background: var(--rec);
-    border-color: var(--rec);
-  }
-
-  button.record-control.confirm {
-    display: flex;
-    width: auto;
-    gap: 4px;
-    padding: 0 7px;
-    color: var(--rec);
-    border-color: color-mix(in srgb, var(--rec) 42%, transparent);
+    color: var(--ink);
   }
 
   button:disabled {
@@ -508,148 +555,198 @@
   }
 
   /* Still clickable (a click while busy sets the next request), but visibly
-     waiting — on the permission prompt, usually. Static: §10 allows no
-     ambient motion here. */
+     waiting — on the permission prompt, usually. */
   button[aria-busy='true'] {
     cursor: progress;
     opacity: 0.75;
   }
 
-  .record-group,
-  .record-confirm,
-  .leave-group,
-  .leave-choices {
-    display: flex;
-    gap: 4px;
-    align-items: center;
+  .round {
+    width: var(--btn);
+    height: var(--btn);
   }
 
-  .leave-group.confirming > button.toggle {
-    display: none;
+  .round:hover,
+  .round.active {
+    background: var(--surface-2);
   }
 
-  .record-video {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    color: var(--text-2);
-    font-size: 12px;
-    white-space: nowrap;
+  .round.active {
+    color: var(--ink);
   }
 
-  .record-video input {
-    margin: 0;
-    accent-color: var(--accent-d);
+  /* A filled well: camera, share, record. */
+  .well,
+  .round.well {
+    color: var(--ink);
+    background: var(--surface-2);
   }
 
-  button.record-now {
-    display: none;
+  .round.well:hover {
+    background: color-mix(in srgb, var(--ink) 7%, var(--surface-2));
   }
 
-  button.leave.expanded,
-  button.end-all {
-    display: flex;
-    width: auto;
-    gap: 4px;
-    padding: 0 7px;
-    font-size: 12px;
-    white-space: nowrap;
+  .round.well.active {
+    color: var(--on-accent);
+    background: var(--accent);
   }
 
-  button.end-all {
-    color: white;
-    background: var(--rec);
-    border-color: var(--rec);
-  }
-
-  button.end-all:hover {
-    background: color-mix(in srgb, var(--rec) 85%, black);
-  }
-
-  .bar-notice {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 6px);
-    display: flex;
-    gap: 4px;
-    align-items: flex-start;
-    width: max-content;
-    max-width: min(300px, calc(100vw - 24px));
-    padding: 4px 3px 4px 7px;
-    color: var(--text);
-    font-size: 12px;
-    line-height: 18px;
-    background: var(--panel);
-    border: 1px solid var(--rec);
-    border-radius: var(--radius-control);
-  }
-
-  .bar-notice button.notice-dismiss {
-    flex-shrink: 0;
-    width: 18px;
-    height: 18px;
-    color: var(--text-2);
-  }
-
-  .bar-notice button.notice-dismiss:hover {
-    color: var(--text);
-  }
-
-  button.leave {
-    color: var(--rec);
-  }
-
-  button.leave:hover {
-    background: color-mix(in srgb, var(--rec) 12%, transparent);
-    border-color: color-mix(in srgb, var(--rec) 32%, transparent);
-  }
-
-  button.panel-control {
-    position: relative;
-  }
-
-  .control-group {
+  /* Microphone and camera, each with its device caret, as one pill. */
+  .split {
     position: relative;
     display: flex;
-    gap: 1px;
+    flex: none;
     align-items: center;
+    border-radius: var(--r-pill);
+    transition: background-color var(--dur-1) var(--ease-out);
   }
 
-  button.caret {
-    width: 15px;
-    color: var(--text);
+  .split .round,
+  .split .round:hover {
+    color: inherit;
+    background: transparent;
+  }
+
+  .split.primary {
+    color: var(--on-accent);
+    background: var(--accent);
+  }
+
+  .split.primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .split.off,
+  .split.well.off {
+    color: var(--rec-ink);
+    background: var(--rec-soft);
+  }
+
+  .split.well {
+    color: var(--ink);
+  }
+
+  .caret {
+    width: 30px;
+    height: var(--btn);
+    padding-right: 6px;
+    color: inherit;
     opacity: 0.75;
   }
 
-  button.caret[aria-expanded='true'] {
+  .caret:hover,
+  .caret[aria-expanded='true'] {
+    color: inherit;
     opacity: 1;
   }
 
-  .device-menu {
-    position: absolute;
-    bottom: calc(100% + 14px);
-    left: 50%;
-    display: grid;
-    gap: 1px;
-    min-width: 200px;
-    max-width: 280px;
-    padding: 3px;
-    background: var(--panel);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-card);
-    transform: translateX(-50%);
+  .record-control.recording,
+  .round.well.record-control.recording {
+    color: var(--rec-ink);
+    background: var(--rec-soft);
   }
 
-  .device-menu button.device-option {
+  .record-control.confirm {
+    color: var(--rec-ink);
+    box-shadow: inset 0 0 0 1.5px var(--rec);
+  }
+
+  .separator {
+    flex: none;
+    width: 1px;
+    height: 28px;
+    margin: 0 6px;
+    background: var(--line-strong);
+  }
+
+  .badge {
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    color: var(--bg);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    background: var(--ink);
+    border-radius: var(--r-pill);
+  }
+
+  .badge.unread {
+    color: var(--on-highlight);
+    background: var(--highlight);
+  }
+
+  .leave-group {
+    position: relative;
+    display: flex;
+  }
+
+  button.leave {
+    display: inline-flex;
+    height: var(--btn);
+    padding: 0 22px 0 18px;
+    align-items: center;
+    gap: 10px;
+    color: var(--on-danger);
+    font-size: 15px;
+    font-weight: 600;
+    background: var(--danger);
+  }
+
+  button.leave:hover,
+  button.leave[aria-expanded='true'] {
+    color: var(--on-danger);
+    background: color-mix(in srgb, var(--danger) 88%, var(--ink));
+  }
+
+  /* Popovers over the capsule: device lists, record's confirm, leave's choice. */
+  .device-menu,
+  .record-confirm.popover,
+  .leave-choices {
+    position: absolute;
+    z-index: 2;
+    bottom: calc(100% + 16px);
+    padding: 6px;
+    color: var(--ink);
+    background: var(--surface);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-float);
+    animation: pop-in var(--dur-2) var(--ease-out);
+  }
+
+  .device-menu {
+    left: 0;
+    display: grid;
+    gap: 2px;
+    min-width: 220px;
+    max-width: 300px;
+  }
+
+  .device-option {
     display: flex;
     width: 100%;
-    height: auto;
-    gap: 10px;
+    min-height: 36px;
+    padding: 6px 10px;
     align-items: center;
     justify-content: space-between;
-    padding: 5px 8px;
-    font-size: 12px;
+    gap: 10px;
+    color: var(--ink);
+    font-size: 13px;
     text-align: left;
+    border-radius: var(--r-sm);
+  }
+
+  .device-option:hover {
+    background: var(--surface-2);
+  }
+
+  .device-option :global(svg) {
+    flex: none;
+    color: var(--accent);
   }
 
   .device-name {
@@ -659,122 +756,267 @@
   }
 
   .device-empty {
-    padding: 5px 8px;
-    font-size: 12px;
-    opacity: 0.6;
+    padding: 6px 10px;
+    color: var(--ink-3);
+    font-size: 13px;
   }
 
-  .badge {
+  .record-group {
+    position: relative;
+    display: flex;
+  }
+
+  .record-confirm {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+  }
+
+  .record-confirm.popover {
+    left: 50%;
+    padding: 6px 6px 6px 14px;
+    transform: translateX(-50%);
+  }
+
+  .record-video {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink);
+    font-size: 13px;
+  }
+
+  .record-video input {
+    margin: 0;
+    accent-color: var(--accent);
+  }
+
+  .record-now,
+  .choice {
+    display: inline-flex;
+    height: 36px;
+    padding: 0 14px;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    border-radius: var(--r-pill);
+  }
+
+  .record-now {
+    color: var(--on-danger);
+    background: var(--danger);
+  }
+
+  .record-now:hover {
+    color: var(--on-danger);
+    background: color-mix(in srgb, var(--danger) 88%, var(--ink));
+  }
+
+  .leave-choices {
+    right: 0;
+    display: grid;
+    gap: 2px;
+    min-width: 180px;
+  }
+
+  .choice {
+    justify-content: flex-start;
+    border-radius: var(--r-sm);
+  }
+
+  .choice:hover {
+    background: var(--surface-2);
+  }
+
+  .choice.end-all {
+    color: var(--rec-ink);
+  }
+
+  .choice.end-all:hover {
+    background: var(--rec-soft);
+  }
+
+  .bar-notice {
     position: absolute;
-    top: -5px;
-    right: -5px;
-    min-width: 15px;
-    height: 15px;
-    padding: 0 3px;
-    color: white;
-    font-size: 9px;
-    line-height: 13px;
-    text-align: center;
-    background: var(--accent-d);
-    border: 1px solid var(--panel);
-    border-radius: 999px;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    display: flex;
+    width: max-content;
+    max-width: min(360px, calc(100vw - 32px));
+    padding: 8px 6px 8px 14px;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 20px;
+    background: var(--surface);
+    border-radius: var(--r-md);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--rec) 55%, transparent),
+      var(--shadow-float);
+    transform: translateX(-50%);
   }
 
-  .badge.unread {
-    background: var(--rec);
+  .bar-notice.raised {
+    bottom: calc(100% + 76px);
   }
 
-  .separator {
-    width: 1px;
-    height: 16px;
-    margin: 0 2px;
-    background: var(--border-d);
+  .notice-dismiss {
+    width: 20px;
+    height: 20px;
+    color: var(--ink-2);
   }
 
-  /* A host's full bar is 364px wide. On a phone it drops the separators and
-     tightens to 298px, leaving slack inside 320px; the confirm steps and
-     device menus open above the bar, anchored to its edges, instead of
-     widening it. Their popovers have the bar as containing block. */
-  @media (max-width: 400px) {
-    .control-bar {
-      gap: 4px;
-      padding: 6px;
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* Tablet: the same capsule, a size down. */
+  @media (max-width: 1099.98px) {
+    .capsule {
+      --btn: 44px;
+
+      gap: 6px;
+      padding: 8px;
     }
 
     .separator {
-      display: none;
+      margin: 0 2px;
     }
 
-    .control-group {
-      position: static;
+    button.leave {
+      padding: 0 18px 0 14px;
+      font-size: 14px;
     }
 
-    .device-menu {
-      bottom: calc(100% + 6px);
-      left: 0;
-      max-width: calc(100vw - 24px);
-      transform: none;
+    .caret {
+      width: 26px;
+    }
+  }
+
+  /* Phone: the capsule spans the width; six round controls share it. */
+  @media (max-width: 639.98px) {
+    .capsule {
+      --btn: clamp(40px, calc((100vw - 64px) / 6), 50px);
+
+      justify-content: space-between;
+      width: 100%;
+      gap: 4px;
+      padding: 8px;
     }
 
-    button.record-control.confirm {
-      display: grid;
-      width: var(--control-height);
+    button.leave {
+      width: var(--btn);
       padding: 0;
+      justify-content: center;
     }
 
-    button.record-control.confirm span {
+    .leave-text {
       display: none;
     }
 
-    .record-confirm,
-    .leave-choices {
-      position: absolute;
-      bottom: calc(100% + 6px);
-      gap: 8px;
-      padding: 6px;
-      background: var(--panel);
-      border: 1px solid var(--border-d);
-      border-radius: var(--radius-card);
+    .scrim,
+    .more-sheet {
+      pointer-events: auto;
     }
 
-    .record-confirm {
-      left: 0;
-      padding-right: 8px;
+    .scrim {
+      position: fixed;
+      z-index: 30;
+      inset: 0;
+      background: var(--scrim);
+      animation: pop-in var(--dur-2) var(--ease-out);
     }
 
-    .leave-choices {
+    .more-sheet {
+      position: fixed;
+      z-index: 31;
       right: 0;
-      gap: 4px;
-    }
-
-    button.record-now {
-      display: flex;
-      width: auto;
-      gap: 4px;
-      padding: 0 7px;
-      color: white;
-      font-size: 12px;
-      white-space: nowrap;
-      background: var(--rec);
-      border-color: var(--rec);
-    }
-
-    button.record-now:hover {
-      background: color-mix(in srgb, var(--rec) 85%, black);
-    }
-
-    .record-video {
-      color: var(--text);
-    }
-
-    .leave-group.confirming > button.toggle {
+      bottom: 0;
+      left: 0;
       display: grid;
-      background: color-mix(in srgb, var(--rec) 12%, transparent);
-      border-color: color-mix(in srgb, var(--rec) 32%, transparent);
+      max-height: 85dvh;
+      padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+      gap: 16px;
+      overflow-y: auto;
+      color: var(--ink);
+      background: var(--surface);
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
+      box-shadow: var(--shadow-float);
+      animation: sheet-up var(--dur-3) var(--ease-out);
+    }
+
+    .handle {
+      justify-self: center;
+      width: 36px;
+      height: 4px;
+      background: var(--line-strong);
+      border-radius: var(--r-pill);
+    }
+
+    .sheet-actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .round.labelled {
+      display: flex;
+      width: 100%;
+      height: 48px;
+      padding: 0 16px;
+      justify-content: flex-start;
+      gap: 12px;
+      color: var(--ink);
+      font-size: 14px;
+      background: var(--surface-2);
+      border-radius: var(--r-md);
+    }
+
+    .record-group.labelled {
+      display: grid;
+      gap: 8px;
+    }
+
+    .record-confirm:not(.popover) {
+      justify-content: space-between;
+      padding: 0 4px 0 16px;
+    }
+
+    .sheet-devices {
+      display: grid;
+      gap: 6px;
+    }
+
+    .sheet-devices h3 {
+      margin: 0;
+      color: var(--ink-3);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .device-menu.inline {
+      position: static;
+      max-width: none;
+      padding: 4px;
+      background: var(--surface-2);
+      box-shadow: none;
+      animation: none;
     }
 
     .bar-notice.raised {
-      bottom: calc(100% + 54px);
+      bottom: calc(100% + 140px);
+    }
+  }
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
     }
   }
 </style>

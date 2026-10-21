@@ -39,9 +39,23 @@
 <style>
   .clock {
     flex: none;
-    color: var(--text);
-    font-size: 12.5px;
+    padding: 6px 12px;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 22px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+  }
+
+  @media (max-width: 639.98px) {
+    .clock {
+      padding: 0;
+      color: var(--ink-2);
+      font-size: 13px;
+      border: 0;
+    }
   }
 </style>
