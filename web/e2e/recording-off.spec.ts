@@ -44,7 +44,8 @@ test('a host in the meeting has no record control', async ({ page }) => {
     'Turn camera on',
     'Choose camera',
     'Share screen',
-    'Speaker view',
+    // Orbit is the default view, so the toggle offers the grid.
+    'Grid view',
     'Open people',
     'Open chat',
     'Leave or end meeting'

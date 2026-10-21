@@ -62,9 +62,10 @@ test('a room lists its recordings without transcript controls', async ({ page })
   await expect(done).toBeVisible();
   await expect(page.locator('[data-recording-id="old"]')).toBeVisible();
   expect(api.count('GET', RoomRecordingsPath.replace('{slug}', 'standup'))).toBeGreaterThan(0);
-  // No transcript column, cell, download or request.
+  // No transcript column, cell, download or request. Rows are subgrids of
+  // the list, so the list holds the column tracks.
   const tracks = await done.evaluate((element) =>
-    getComputedStyle(element).gridTemplateColumns.split(' ')
+    getComputedStyle(element.parentElement!).gridTemplateColumns.split(' ')
   );
   expect(tracks).toHaveLength(5);
   await expect(page.getByTestId('transcript').filter({ visible: true })).toHaveCount(0);

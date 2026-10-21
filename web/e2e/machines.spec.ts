@@ -659,9 +659,10 @@ test.describe('transcripts in the recordings list', () => {
     api.state.recordings = [recording('a', wireNull), recording('b', wireNull)];
     await page.setViewportSize({ width: 1280, height: 720 });
 
+    // Rows are subgrids of the list, so the list holds the column tracks.
     const columns = () =>
       row(page, 'a').evaluate((element) =>
-        getComputedStyle(element).gridTemplateColumns.split(' ')
+        getComputedStyle(element.parentElement!).gridTemplateColumns.split(' ')
       );
     await page.goto('/rooms/standup');
     await expect(row(page, 'a')).toBeVisible();
