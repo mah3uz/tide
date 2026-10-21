@@ -5,9 +5,14 @@
 
   let { message, onopen }: { message: ChatMessage; onopen: () => void } = $props();
 
+  // A guest's bidi overrides would otherwise reverse what the preview shows,
+  // e.g. a file name ending in "gnp.exe" read as "exe.png".
+  const bidiControls = /[؜‎‏‪-‮⁦-⁩]/g;
+  const plain = (text: string) => text.replace(bidiControls, '');
+
   // One line, as plain text: the chat sheet is where a message is read.
   const line = $derived.by(() => {
-    const lines = chatMessagePreview(message).trim().split('\n');
+    const lines = plain(chatMessagePreview(message)).trim().split('\n');
     return lines.length > 1 ? `${lines[0]}…` : lines[0];
   });
 </script>
@@ -15,7 +20,7 @@
 <button type="button" class="peek" title="Open chat" data-testid="chat-peek" onclick={onopen}>
   {#if isGuest(message.identity)}<span class="guest-tag">Guest</span>{/if}
   <!-- An image's preview already names who sent it. -->
-  {#if !message.image}<span class="from">{message.from}:</span>{/if}
+  {#if !message.image}<span class="from">{plain(message.from)}:</span>{/if}
   <span class="line">{line}</span>
 </button>
 
@@ -41,6 +46,11 @@
 
   .peek:hover {
     color: var(--ink);
+  }
+
+  .from,
+  .line {
+    unicode-bidi: isolate;
   }
 
   .from {

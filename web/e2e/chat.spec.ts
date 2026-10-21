@@ -271,6 +271,20 @@ test.describe('chat messages from other participants', () => {
     await expect(page.getByTestId('chat-peek').locator('.guest-tag')).toHaveCount(0);
   });
 
+  test('the peek drops bidi overrides, so a guest cannot reverse what it shows', async ({
+    page
+  }) => {
+    await openChat(page);
+    const chat = page.getByRole('complementary', { name: 'Chat' });
+    await chat.getByRole('button', { name: 'Close chat' }).click();
+    // Displayed with the override, "invoice‮gnp.exe" reads as "invoiceexe.png".
+    await receive(page, 'open invoice‮gnp.exe', 'Mallory‮', 'guest:mallory');
+    const peek = page.getByTestId('chat-peek');
+    await expect(peek).toContainText('open invoicegnp.exe');
+    const shown = await peek.textContent();
+    expect(shown).not.toMatch(/[؜‎‏‪-‮⁦-⁩]/);
+  });
+
   test('groups the cap leaves in the log stay where they are as old messages go', async ({
     page
   }) => {
