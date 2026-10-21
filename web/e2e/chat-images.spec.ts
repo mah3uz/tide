@@ -1,4 +1,4 @@
-import { crc32, deflateSync } from 'node:zlib';
+import { crc32, deflateRawSync, deflateSync } from 'node:zlib';
 import { test, expect, type Page } from '@playwright/test';
 import { defaultState, mockApi } from './mock-api';
 import { fakeSfu, fakeSfuLaunchArgs, type FakeSfu } from './fake-sfu';
@@ -26,13 +26,26 @@ interface StreamSpec {
   /** Continue this stream, from chunk `firstChunk`, rather than open one. */
   streamId?: string;
   firstChunk?: number;
+  /** 1 is deflate-raw: `bytes` are then compressed, and `size` is what they inflate to. */
+  compression?: number;
+  /** All of `bytes` in the header, as livekit-client sends a payload that fits one packet. */
+  inline?: boolean;
 }
 
 type TestWindow = Window & {
   __revoked: string[];
-  __sent: { bytes: Uint8Array; options: Record<string, unknown> }[];
+  __sent: { bytes: Uint8Array; options: Record<string, unknown>; at: number }[];
   __releaseSend?: () => void;
+  /** DecompressionStreams made, and the bytes read out of them. */
+  __decompressors: number;
+  __inflated: number;
+  /** Gain nodes made: each sound played makes the same number. */
+  __gains: number;
   __webp(width: number, height: number, type?: string): Promise<Uint8Array>;
+  __bytes(base64: string): Uint8Array;
+  __animatedWebp(): Promise<Uint8Array>;
+  __largeWebp(): Promise<Uint8Array>;
+  __large?: Uint8Array;
   __push(spec: StreamSpec, bytes: Uint8Array): string;
   __finish(identity: string, streamId: string): void;
   __tideRoom: {
@@ -40,14 +53,16 @@ type TestWindow = Window & {
     remoteParticipants: Map<string, unknown>;
     incomingDataStreamManager: {
       byteStreamHandlers: Map<string, unknown>;
+      byteStreamControllers: Map<string, { controller: ReadableStreamDefaultController }>;
       handleDataStreamPacket(packet: unknown, encryptionType: number): void;
     };
     emit(...args: unknown[]): boolean;
   };
 };
 
-// Installed before the app: records every revoked object URL, and builds
-// and pushes data streams as livekit-client receives them.
+// Installed before the app: records every revoked object URL, what is
+// inflated and what sounds play, and builds and pushes data streams as
+// livekit-client receives them.
 function installHarness(): void {
   const w = window as unknown as TestWindow;
   w.__revoked = [];
@@ -56,6 +71,69 @@ function installHarness(): void {
   URL.revokeObjectURL = (url: string) => {
     w.__revoked.push(url);
     revoke(url);
+  };
+  w.__decompressors = 0;
+  w.__inflated = 0;
+  const NativeDecompressionStream = DecompressionStream;
+  window.DecompressionStream = class extends NativeDecompressionStream {
+    constructor(format: CompressionFormat) {
+      super(format);
+      w.__decompressors += 1;
+      const counted = super.readable.pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            w.__inflated += chunk.byteLength;
+            controller.enqueue(chunk);
+          }
+        })
+      );
+      Object.defineProperty(this, 'readable', { value: counted });
+    }
+  };
+  w.__gains = 0;
+  const createGain = BaseAudioContext.prototype.createGain;
+  BaseAudioContext.prototype.createGain = function (this: BaseAudioContext) {
+    w.__gains += 1;
+    return createGain.call(this);
+  };
+  w.__bytes = (base64) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  // Two frames around a still one the browser encoded.
+  w.__animatedWebp = async () => {
+    const frame = Array.from((await w.__webp(64, 64)).subarray(12));
+    const ascii = (text: string) => Array.from(text, (char) => char.charCodeAt(0));
+    const u24 = (n: number) => [n & 255, (n >> 8) & 255, (n >> 16) & 255];
+    const u32 = (n: number) => [...u24(n), (n >>> 24) & 255];
+    const chunk = (type: string, payload: number[]) => [
+      ...ascii(type),
+      ...u32(payload.length),
+      ...payload,
+      ...(payload.length % 2 ? [0] : [])
+    ];
+    const anmf = [...u24(0), ...u24(0), ...u24(63), ...u24(63), ...u24(100), 0, ...frame];
+    const body = [
+      ...ascii('WEBP'),
+      ...chunk('VP8X', [0x02, 0, 0, 0, ...u24(63), ...u24(63)]),
+      ...chunk('ANIM', [0, 0, 0, 0, 0, 0]),
+      ...chunk('ANMF', anmf),
+      ...chunk('ANMF', anmf)
+    ];
+    return new Uint8Array([...ascii('RIFF'), ...u32(body.length), ...body]);
+  };
+  // Noise, as large as tide sends: about 2 MB.
+  w.__largeWebp = async () => {
+    for (let side = 1400; side >= 400; side -= 100) {
+      const canvas = new OffscreenCanvas(side, side);
+      const context = canvas.getContext('2d')!;
+      const pixels = context.createImageData(side, side);
+      for (let offset = 0; offset < pixels.data.length; offset += 65_536) {
+        crypto.getRandomValues(pixels.data.subarray(offset, offset + 65_536));
+      }
+      for (let offset = 3; offset < pixels.data.length; offset += 4) pixels.data[offset] = 255;
+      context.putImageData(pixels, 0, 0);
+      const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 1 });
+      if (blob.size <= 2 * 1024 * 1024) return new Uint8Array(await blob.arrayBuffer());
+    }
+    throw new Error('No noisy WebP fits in 2 MB.');
   };
   w.__webp = async (width, height, type = 'image/webp') => {
     const canvas = new OffscreenCanvas(width, height);
@@ -83,13 +161,15 @@ function installHarness(): void {
             timestamp: BigInt(Date.now()),
             totalLength: BigInt(spec.size ?? bytes.length),
             attributes: spec.attributes ?? {},
-            compression: 0,
+            compression: spec.compression ?? 0,
+            inlineContent: spec.inline ? bytes : undefined,
             contentHeader: { case: 'byteHeader', value: { name: spec.name ?? 'image' } }
           }
         }),
         0
       );
     }
+    if (spec.inline) return streamId;
     let index = spec.firstChunk ?? 0;
     for (let offset = 0; offset < bytes.length; offset += 15_000, index++) {
       manager.handleDataStreamPacket(
@@ -161,7 +241,7 @@ function holdSends(page: Page): Promise<void> {
     const sendBytes = local.sendBytes.bind(local);
     local.sendBytes = async (...args: unknown[]) => {
       const [bytes, options] = args as [Uint8Array, Record<string, unknown>];
-      w.__sent.push({ bytes, options });
+      w.__sent.push({ bytes, options, at: performance.now() });
       (options.onProgress as (progress: number) => void)(0.4);
       await new Promise<void>((resolve) => (w.__releaseSend = resolve));
       return sendBytes(...args);
@@ -335,6 +415,12 @@ test('a pasted screenshot and an image dropped on the chat are sent; pasted text
   await expect(chat(page).locator('.group.mine .picture img')).toHaveCount(1);
   expect(await deliver('drop')).toBe(2);
   await expect(chat(page).locator('.group.mine .picture img')).toHaveCount(2);
+  // Receivers drop a sender's images that come closer together than tide
+  // sends them, so the second waited for its turn.
+  const [first, second] = await page.evaluate(() =>
+    (window as unknown as TestWindow).__sent.map((sent) => sent.at)
+  );
+  expect(second - first).toBeGreaterThanOrEqual(4_900);
   await deliver('paste with text');
   // Preparing an image takes a moment; give a wrongly taken one time to show.
   await page.waitForTimeout(1_000);
@@ -413,8 +499,8 @@ test('images that are too big, lie about themselves, or crowd in are dropped', a
         webp.subarray(0, 100)
       )
     });
-    const held = [open('guest:mallory')];
-    w.__push({ identity: 'guest:mallory', mimeType: 'image/webp' }, webp);
+    const held = [open('guest:dana')];
+    w.__push({ identity: 'guest:dana', mimeType: 'image/webp' }, webp);
     held.push(open('guest:a'), open('guest:b'));
     w.__push({ identity: 'guest:c', mimeType: 'image/webp' }, webp);
     for (const { identity, streamId } of held) {
@@ -480,8 +566,8 @@ test("an image's memory is given back when it leaves the chat, and when the meet
   await expect(chat(page).locator('.picture img')).toHaveCount(0);
   expect(await revoked()).toContain(first);
 
-  await pushWebp(page, { identity: 'guest:mallory' });
-  await pushWebp(page, { identity: 'guest:mallory' });
+  await pushWebp(page, { identity: 'guest:ann' });
+  await pushWebp(page, { identity: 'guest:ben' });
   await expect(chat(page).locator('.picture img')).toHaveCount(2);
   const kept = await urls();
   expect(await revoked()).not.toContain(kept[0]);
@@ -491,4 +577,242 @@ test("an image's memory is given back when it leaves the chat, and when the meet
   await expect(page.getByRole('button', { name: 'Open chat' })).toHaveCount(0);
   const after = await revoked();
   for (const url of kept) expect(after).toContain(url);
+});
+
+const bomb = (inflated: number) => deflateRawSync(Buffer.alloc(inflated)).toString('base64');
+
+// A guest's modified client can mark a stream deflate-raw. A 15 KB packet of
+// it inflates to 15 MB, a few of them to more than a tab can hold, and on
+// every receiver at once.
+test('a compressed image stream is dropped at its header, before anything inflates it', async ({
+  page
+}) => {
+  await openChat(page, true);
+  const result = await page.evaluate(
+    async ({ chunked, inline, maximumImageBytes }) => {
+      const w = window as unknown as TestWindow;
+      w.__decompressors = 0;
+      w.__inflated = 0;
+      const spec = { mimeType: 'image/webp', size: maximumImageBytes, compression: 1 };
+      w.__push({ ...spec, identity: 'guest:bomb-1' }, w.__bytes(chunked));
+      w.__push({ ...spec, identity: 'guest:bomb-2', inline: true }, w.__bytes(inline));
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      return { decompressors: w.__decompressors, inflated: w.__inflated };
+    },
+    { chunked: bomb(64 * 1024 * 1024), inline: bomb(15 * 1024 * 1024), maximumImageBytes }
+  );
+  expect(result).toEqual({ decompressors: 0, inflated: 0 });
+  await pushWebp(page, { identity: 'guest:mallory' });
+  await expect(chat(page).locator('.picture img')).toHaveCount(1);
+});
+
+test("without tide's header filter, the room's payload cap still bounds what a compressed stream inflates to", async ({
+  page
+}) => {
+  await openChat(page, true);
+  const compressed = bomb(64 * 1024 * 1024);
+  const inflatedBy = (identity: string, inline: boolean) =>
+    page.evaluate(
+      async ({ identity, compressed, inline, maximumImageBytes }) => {
+        const w = window as unknown as TestWindow;
+        // As if a livekit-client upgrade had moved the entry point tide wraps.
+        const manager = w.__tideRoom.incomingDataStreamManager as Partial<{
+          handleDataStreamPacket: unknown;
+        }>;
+        delete manager.handleDataStreamPacket;
+        w.__inflated = 0;
+        w.__push(
+          { identity, mimeType: 'image/webp', size: maximumImageBytes, compression: 1, inline },
+          w.__bytes(compressed)
+        );
+        let last = -1;
+        while (last !== w.__inflated) {
+          last = w.__inflated;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        return w.__inflated;
+      },
+      { identity, compressed, inline, maximumImageBytes }
+    );
+  const chunked = await inflatedBy('guest:bomb-1', false);
+  const inline = await inflatedBy('guest:bomb-2', true);
+  // A little past the cap: livekit-client stops at the first piece over it.
+  for (const inflated of [chunked, inline]) {
+    expect(inflated).toBeGreaterThan(0);
+    expect(inflated).toBeLessThanOrEqual(maximumImageBytes + 1024 * 1024);
+  }
+  await expect(chat(page).locator('.picture img')).toHaveCount(0);
+});
+
+// What tide sends is a still WebP or JPEG no more than 2048 px on its long
+// side. Anything else came from a modified client: a GIF or animated WebP
+// keeps decoding frames for everyone while it is on screen, and the PNG and
+// GIF decoders are attack surface tide has no need to expose.
+test('a remote image tide could not have sent is dropped: PNG, GIF, animated WebP, past 2048 px', async ({
+  page
+}) => {
+  await openChat(page, true);
+  const refused = ['guest:png', 'guest:gif', 'guest:animated', 'guest:wide', 'guest:tall'];
+  await page.evaluate(async () => {
+    const w = window as unknown as TestWindow;
+    const gif = w.__bytes('R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==');
+    const streams: [string, string, Uint8Array][] = [
+      ['guest:png', 'image/png', await w.__webp(64, 64, 'image/png')],
+      ['guest:gif', 'image/gif', gif],
+      ['guest:animated', 'image/webp', await w.__animatedWebp()],
+      ['guest:wide', 'image/webp', await w.__webp(2049, 64)],
+      ['guest:tall', 'image/jpeg', await w.__webp(64, 2049, 'image/jpeg')]
+    ];
+    for (const [identity, mimeType, bytes] of streams) {
+      w.__push({ identity, mimeType }, bytes);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  });
+  // The limits themselves are fine to send: a 2048 px strip arrives, in a
+  // box tall enough to see and to click.
+  await pushWebp(page, { identity: 'guest:mallory' }, 2048, 8);
+  await expect(chat(page).locator('.picture img')).toHaveCount(1);
+  const box = await chat(page).locator('.picture').boundingBox();
+  expect(box!.width).toBeCloseTo(260, 0);
+  expect(box!.height).toBeGreaterThanOrEqual(48);
+  for (const identity of refused) {
+    await expect(chat(page).getByText(`Some images from ${identity} weren't shown`)).toHaveCount(1);
+  }
+});
+
+// One guest looping images would otherwise fill every receiver's memory and
+// sound the new-message chime with each.
+test('images a sender sends faster than tide does are dropped, with one quiet line and one sound', async ({
+  page
+}) => {
+  await openChat(page, true);
+  const gains = () => page.evaluate(() => (window as unknown as TestWindow).__gains);
+  const before = await gains();
+  await sendText(page, 'hello');
+  await expect(chat(page).getByText('hello')).toBeVisible();
+  await page.waitForTimeout(300);
+  const perSound = (await gains()) - before;
+  expect(perSound).toBeGreaterThan(0);
+
+  const start = await gains();
+  for (let index = 0; index < 5; index++) {
+    await pushWebp(page, { identity: 'guest:mallory' });
+    await page.waitForTimeout(150);
+  }
+  await expect(chat(page).locator('.picture img')).toHaveCount(1);
+  await expect(chat(page).getByText("Some images from Mallory Guest weren't shown")).toHaveCount(1);
+  await page.waitForTimeout(300);
+  expect((await gains()) - start).toBe(perSound);
+
+  // The limit is the sender's alone.
+  await pushWebp(page, { identity: 'guest:other' });
+  await expect(chat(page).locator('.picture img')).toHaveCount(2);
+
+  // Past its limit of streams a minute, even a good image from a sender is dropped unread.
+  await page.evaluate(() => {
+    const w = window as unknown as TestWindow;
+    const junk = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+    for (let index = 0; index < 20; index++) {
+      w.__push({ identity: 'guest:spammer', mimeType: 'image/svg+xml' }, junk);
+    }
+  });
+  await pushWebp(page, { identity: 'guest:spammer' });
+  await page.waitForTimeout(500);
+  await expect(chat(page).locator('.picture img')).toHaveCount(2);
+  await expect(chat(page).getByText("Some images from guest:spammer weren't shown")).toHaveCount(1);
+});
+
+test('past 40 MB of images, the oldest give their memory back and say they are no longer available', async ({
+  page
+}) => {
+  test.setTimeout(120_000);
+  await openChat(page, true);
+  const size = await page.evaluate(async () => {
+    const w = window as unknown as TestWindow;
+    w.__large = await w.__largeWebp();
+    return w.__large.length;
+  });
+  expect(size).toBeGreaterThan(1024 * 1024);
+  const kept = Math.floor((40 * 1024 * 1024) / size);
+  const shown: string[] = [];
+  for (let index = 0; index < kept + 3; index++) {
+    await page.evaluate((index) => {
+      const w = window as unknown as TestWindow;
+      w.__push({ identity: `guest:p${index}`, mimeType: 'image/webp' }, w.__large!);
+    }, index);
+    await expect(chat(page).locator('.picture')).toHaveCount(index + 1);
+    shown.push((await chat(page).locator('.picture img').last().getAttribute('src'))!);
+  }
+
+  await expect(chat(page).getByText('Image no longer available')).toHaveCount(3);
+  await expect(chat(page).locator('.picture img')).toHaveCount(kept);
+  const revoked = await page.evaluate(() => (window as unknown as TestWindow).__revoked);
+  expect(revoked).toEqual(shown.slice(0, 3));
+  // The log keeps its shape where an image was.
+  const box = await chat(page).locator('.picture').first().boundingBox();
+  expect(box!.width).toBeCloseTo(260, 0);
+  expect(box!.height).toBeCloseTo(260, 0);
+});
+
+// Two guards reach into livekit-client: the readable stream under a
+// ByteStreamReader (discarding a stream) and the room's packet entry point
+// (refusing compressed images). An upgrade that moves either must fail here,
+// not quietly let a stream queue without limit.
+test("tide's reaches into livekit-client internals still find what they need", async ({ page }) => {
+  const warnings: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning') warnings.push(message.text());
+  });
+  await openChat(page, true);
+  const found = await page.evaluate(async () => {
+    const w = window as unknown as TestWindow;
+    const manager = w.__tideRoom.incomingDataStreamManager;
+    // Declares 100 bytes, then keeps sending: livekit-client's reader throws,
+    // and only reading the stream under it keeps what follows from queueing.
+    const streamId = w.__push(
+      { identity: 'guest:liar', mimeType: 'image/webp', size: 100, end: false },
+      new Uint8Array(30_000)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    w.__push(
+      { identity: 'guest:liar', mimeType: 'image/webp', streamId, firstChunk: 2, end: false },
+      new Uint8Array(40 * 15_000)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return {
+      queueRoom: manager.byteStreamControllers.get(streamId)!.controller.desiredSize,
+      filtering: Object.hasOwn(manager, 'handleDataStreamPacket')
+    };
+  });
+  expect(found.queueRoom).toBeGreaterThanOrEqual(0);
+  expect(found.filtering).toBe(true);
+  expect(warnings.filter((text) => text.includes('[tide] livekit-client'))).toEqual([]);
+
+  // And when the reader's stream is gone, it says so, once.
+  const said = await page.evaluate(async () => {
+    const path = '/src/lib/chat/imageReceiver.ts';
+    const { ChatImageReceiver } = (await import(/* @vite-ignore */ path)) as {
+      ChatImageReceiver: new (
+        deliver: () => void,
+        dropped: () => void
+      ) => { handle(reader: unknown, sender: { identity: string }): void };
+    };
+    const seen: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => seen.push(String(args[0]));
+    const receiver = new ChatImageReceiver(
+      () => undefined,
+      () => undefined
+    );
+    const moved = () => ({
+      info: { size: 10, mimeType: 'image/svg+xml' },
+      async *[Symbol.asyncIterator]() {}
+    });
+    receiver.handle(moved(), { identity: 'guest:a' });
+    receiver.handle(moved(), { identity: 'guest:b' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    console.warn = warn;
+    return seen;
+  });
+  expect(said).toEqual([expect.stringContaining('ByteStreamReader.reader')]);
 });

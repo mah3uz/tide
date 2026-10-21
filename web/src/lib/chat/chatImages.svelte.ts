@@ -1,12 +1,40 @@
 import type { Room } from 'livekit-client';
 import type { ChatMessage } from '#lib/rtc/room.svelte.js';
-import { ChatImageReceiver, type ReceivedImage } from './imageReceiver';
-import { ChatImageError, chatImageTopic, prepareImage, type ChatImage } from './images';
+import { ChatImageReceiver, refuseCompressedImages, type ReceivedImage } from './imageReceiver';
+import {
+  ChatImageError,
+  chatImageTopic,
+  imageSpacing,
+  prepareImage,
+  type SentImageType,
+  type ShownImage
+} from './images';
+
+/** Past this, the oldest images give back their memory and show as no longer available. */
+const maximumRetainedBytes = 40 * 1024 * 1024;
+/** At most one "weren't shown" line per sender this often. */
+const noticeInterval = 60_000;
+
+class HeldImage implements ShownImage {
+  readonly kind = 'image';
+  url = $state('');
+
+  constructor(
+    url: string,
+    readonly width: number,
+    readonly height: number,
+    readonly mimeType: SentImageType,
+    readonly size: number
+  ) {
+    this.url = url;
+  }
+}
 
 /**
  * Images in a meeting's chat, behind TIDE_CHAT_IMAGES. Every object URL a
  * message shows is made and revoked here: when the message falls out of the
- * chat (release), and when the session ends (stop).
+ * chat (release), when the images held pass maximumRetainedBytes, and when
+ * the session ends (stop).
  */
 export class ChatImages {
   /** The deployment's switch, from the room's public info; set before connecting. */
@@ -16,15 +44,24 @@ export class ChatImages {
   progress = $state<number>();
   error = $state('');
 
-  private readonly urls = new Set<string>();
-  private readonly receiver = new ChatImageReceiver((image) => this.received(image));
+  private readonly held: HeldImage[] = [];
+  private retained = 0;
+  private readonly noticed = new Map<string, number>();
+  private lastSent = -Infinity;
+  private readonly receiver = new ChatImageReceiver(
+    (image) => this.received(image),
+    (identity) => this.withheld(identity)
+  );
   private registered = false;
   private session = 0;
 
   constructor(
     private readonly room: Room,
-    private readonly append: (message: ChatMessage) => void
-  ) {}
+    /** A quiet message plays no sound and counts as nothing new. */
+    private readonly append: (message: ChatMessage, quiet?: boolean) => void
+  ) {
+    refuseCompressedImages(room);
+  }
 
   /**
    * Starts a session. Off, no handler is registered, and livekit-client then
@@ -43,8 +80,8 @@ export class ChatImages {
     if (this.registered) this.room.unregisterByteStreamHandler(chatImageTopic);
     this.registered = false;
     this.receiver.reset();
-    for (const url of this.urls) URL.revokeObjectURL(url);
-    this.urls.clear();
+    while (this.held.length > 0) this.forget(this.held[0]);
+    this.noticed.clear();
     this.sending = false;
     this.progress = undefined;
     this.error = '';
@@ -52,8 +89,7 @@ export class ChatImages {
 
   /** A message leaving the chat gives back its image's memory. */
   release(message: ChatMessage): void {
-    if (!message.image || !this.urls.delete(message.image.url)) return;
-    URL.revokeObjectURL(message.image.url);
+    if (message.image instanceof HeldImage) this.forget(message.image);
   }
 
   async send(file: Blob): Promise<void> {
@@ -65,6 +101,11 @@ export class ChatImages {
     try {
       const prepared = await prepareImage(file);
       if (session !== this.session) return;
+      // Receivers drop a sender's images that come closer together.
+      const wait = this.lastSent + imageSpacing - performance.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (session !== this.session) return;
+      this.lastSent = performance.now();
       this.progress = 0;
       await this.room.localParticipant.sendBytes(prepared.bytes, {
         topic: chatImageTopic,
@@ -99,9 +140,8 @@ export class ChatImages {
   }
 
   private received(image: ReceivedImage): void {
-    const sender = this.room.getParticipantByIdentity(image.identity);
     this.append({
-      from: sender?.name || image.identity || 'Guest',
+      from: this.nameOf(image.identity),
       identity: image.identity,
       text: '',
       ts: Date.now(),
@@ -110,15 +150,47 @@ export class ChatImages {
     });
   }
 
-  private track(blob: Blob, image: Pick<ChatImage, 'width' | 'height' | 'mimeType'>): ChatImage {
-    const url = URL.createObjectURL(blob);
-    this.urls.add(url);
-    return {
-      url,
-      width: image.width,
-      height: image.height,
-      mimeType: image.mimeType,
-      size: blob.size
-    };
+  private withheld(identity: string): void {
+    const now = performance.now();
+    if (now - (this.noticed.get(identity) ?? -Infinity) < noticeInterval) return;
+    this.noticed.set(identity, now);
+    this.append(
+      {
+        from: this.nameOf(identity),
+        identity,
+        text: '',
+        ts: Date.now(),
+        mine: false,
+        image: { kind: 'withheld' }
+      },
+      true
+    );
+  }
+
+  private nameOf(identity: string): string {
+    return this.room.getParticipantByIdentity(identity)?.name || identity || 'Guest';
+  }
+
+  private track(blob: Blob, image: Pick<ShownImage, 'width' | 'height' | 'mimeType'>): HeldImage {
+    const held = new HeldImage(
+      URL.createObjectURL(blob),
+      image.width,
+      image.height,
+      image.mimeType,
+      blob.size
+    );
+    this.held.push(held);
+    this.retained += held.size;
+    while (this.retained > maximumRetainedBytes) this.forget(this.held[0]);
+    return held;
+  }
+
+  private forget(image: HeldImage): void {
+    const index = this.held.indexOf(image);
+    if (index < 0) return;
+    this.held.splice(index, 1);
+    this.retained -= image.size;
+    URL.revokeObjectURL(image.url);
+    image.url = '';
   }
 }
