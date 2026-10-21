@@ -45,21 +45,6 @@
     'Space Grotesk Variable', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Consolas, monospace;
-
-  /* Legacy utilities (bg-paper, border-border, rounded-card, …) for the
-     components not yet restyled. Remove with the legacy block below. */
-  --color-paper: var(--paper);
-  --color-border: var(--border);
-  --color-stage: var(--stage);
-  --color-panel: var(--panel);
-  --color-panel-2: var(--panel-2);
-  --color-border-d: var(--border-d);
-  --color-text: var(--text);
-  --color-text-2: var(--text-2);
-  --color-accent-d: var(--accent-d);
-  --radius-control: var(--r-sm);
-  --radius-card: var(--r-md);
-  --radius-tile: var(--r-md);
 }
 
 :root {
@@ -188,32 +173,6 @@
   --shadow-float:
     0 0 0 1px var(--line), 0 18px 40px rgb(19 32 27 / 12%), 0 2px 6px rgb(19 32 27 / 6%);
   --scrim: rgb(19 32 27 / 28%);
-}
-
-/* LEGACY ALIASES — old names for components not yet restyled; delete once
-   nothing reads them. Same-named tokens (--surface, --surface-2, --ink,
-   --ink-2, --accent, --accent-hover, --rec, --ok, --warn) keep their old
-   meaning under new values: --surface was already the card fill. Mapping:
-   paper→bg, border→line-strong, stage→bg, panel→surface, panel-2→surface-2,
-   border-d→line-strong, text→ink, text-2→ink-3, accent-d→accent. */
-:root {
-  --paper: var(--bg);
-  --border: var(--line-strong);
-  --stage: var(--bg);
-  --panel: var(--surface);
-  --panel-2: var(--surface-2);
-  --border-d: var(--line-strong);
-  --text: var(--ink);
-  --text-2: var(--ink-3);
-  --accent-d: var(--accent);
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --control-height: 28px;
-  --motion-fast: var(--dur-1) var(--ease-out);
 }
 
 * {

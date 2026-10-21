@@ -77,14 +77,14 @@
     justify-items: center;
     gap: 8px;
     color: var(--ink-2);
-    background: var(--paper);
+    background: var(--bg);
   }
 
   .connecting span {
     padding: 2px 7px;
     color: var(--ink);
     font-size: 11px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line-strong);
     border-radius: 999px;
   }
 

@@ -192,15 +192,15 @@
   :global(html),
   :global(body) {
     overflow: hidden;
-    background: var(--stage);
+    background: var(--bg);
   }
 
   .composite {
     width: 100vw;
     height: 100vh;
     padding: 12px;
-    color: var(--text);
-    background: var(--stage);
+    color: var(--ink);
+    background: var(--bg);
   }
 
   .media-layout {
@@ -250,9 +250,9 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    background: var(--panel-2);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-tile);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
     grid-area: focus;
   }
 
@@ -264,21 +264,21 @@
     align-items: center;
     gap: 6px;
     padding: 2px 6px;
-    color: var(--text);
+    color: var(--ink);
     font-size: 12px;
-    background: color-mix(in srgb, var(--stage) 78%, transparent);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
   }
 
   .secondary {
-    color: var(--text-2);
+    color: var(--ink-3);
     font-size: 10px;
     text-transform: uppercase;
   }
 
   .focus-pane {
-    background: var(--stage);
+    background: var(--bg);
   }
 
   .focus-pane video {

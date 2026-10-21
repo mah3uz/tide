@@ -148,17 +148,17 @@
        lose to the stream's size and overflowed the page sideways. */
     width: clamp(min(140px, 100cqw), calc(100cqh * var(--va)), 100cqw);
     max-height: 100cqh;
-    background: var(--panel-2);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-tile);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
     transition:
-      border-color var(--motion-fast),
-      width var(--motion-fast),
-      aspect-ratio var(--motion-fast);
+      border-color var(--dur-1) var(--ease-out),
+      width var(--dur-1) var(--ease-out),
+      aspect-ratio var(--dur-1) var(--ease-out);
   }
 
   .video-box.speaking {
-    border-color: var(--accent-d);
+    border-color: var(--accent);
   }
 
   .cell.fit-width {
@@ -253,7 +253,7 @@
     grid-area: 1 / 1;
     width: 100%;
     height: 100%;
-    border-radius: calc(var(--radius-tile) - 1px);
+    border-radius: calc(var(--r-md) - 1px);
   }
 
   video {
@@ -267,7 +267,7 @@
   .placeholder {
     display: grid;
     place-items: center;
-    color: var(--text-2);
+    color: var(--ink-3);
     font-size: 18px;
   }
 
@@ -276,12 +276,12 @@
     top: 8px;
     left: 8px;
     padding: 2px 6px;
-    color: var(--text-2);
+    color: var(--ink-3);
     font-size: 10px;
     line-height: 16px;
-    background: color-mix(in srgb, var(--stage) 78%, transparent);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
   }
 
   .cell:focus-within {
@@ -312,14 +312,14 @@
     align-items: center;
     gap: 5px;
     padding: 2px 6px;
-    color: var(--text-2);
+    color: var(--ink-3);
     font-size: 12px;
-    background: color-mix(in srgb, var(--stage) 78%, transparent);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
     white-space: nowrap;
     pointer-events: auto;
-    transition: color var(--motion-fast);
+    transition: color var(--dur-1) var(--ease-out);
   }
 
   .name {
@@ -333,12 +333,12 @@
   }
 
   .speaking .name-label {
-    color: var(--text);
+    color: var(--ink);
   }
 
   .you {
     flex: none;
-    color: var(--text-2);
+    color: var(--ink-3);
   }
 
   @media (max-width: 720px) {
@@ -368,7 +368,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .video-box {
-      transition: border-color var(--motion-fast);
+      transition: border-color var(--dur-1) var(--ease-out);
     }
   }
 </style>
