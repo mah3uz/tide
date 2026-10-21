@@ -1,6 +1,6 @@
 <script lang="ts">
   import { MicrophoneSlash } from 'phosphor-svelte';
-  import { participantColor } from '#lib/ui/participantColor.js';
+  import { initials, participantColor } from '#lib/ui/participantColor.js';
   import Waveform from '#lib/ui/Waveform.svelte';
   import type { ParticipantView } from './media';
   import { attachMediaTrack } from './mediaElement';
@@ -46,12 +46,7 @@
   });
 
   const color = $derived(participantColor(participant.identity));
-  const initials = $derived.by(() => {
-    const words = participant.name.trim().split(/\s+/).filter(Boolean);
-    const first = Array.from(words[0] ?? '')[0] ?? '';
-    const last = words.length > 1 ? (Array.from(words.at(-1) ?? '')[0] ?? '') : '';
-    return (first + last).toUpperCase() || '?';
-  });
+  const letters = $derived(initials(participant.name));
 </script>
 
 <article
@@ -88,7 +83,7 @@
         aria-label={`${participant.name}'s video`}
       ></video>
     {:else}
-      <div class="initials" aria-hidden="true">{initials}</div>
+      <div class="initials" aria-hidden="true">{letters}</div>
     {/if}
   </div>
 
