@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
   import { page } from '$app/state';
   import { connectionChrome } from '#lib/rtc/connection.svelte.js';
+  import { registerServiceWorker } from '#lib/pwa/register.js';
   import Hairline from '#lib/ui/Hairline.svelte';
   import { theme } from '#lib/ui/theme.svelte.js';
   import '@fontsource-variable/space-grotesk';
@@ -19,6 +20,8 @@
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', resolved === 'dark' ? '#070b0a' : '#e8ebe4');
   });
+
+  onMount(registerServiceWorker);
 </script>
 
 <div class="app-shell">
