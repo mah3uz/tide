@@ -126,7 +126,11 @@ export class MeetingActor {
   }
 
   async waitUntilConnected(timeout = 45_000): Promise<void> {
-    await expect(this.page.getByRole('button', { name: 'Share screen' })).toBeVisible({ timeout });
+    // The capsule, not Share screen: the stack serves http://tide:8080, which is
+    // not a secure context, so there is no screen capture and no share button.
+    await expect(this.page.getByRole('navigation', { name: 'Meeting controls' })).toBeVisible({
+      timeout
+    });
     await expect
       .poll(
         () =>

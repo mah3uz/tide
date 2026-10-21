@@ -123,7 +123,9 @@ export async function joinMediaTestRoom(
   }
 
   await page.getByRole('button', { name: 'Join meeting' }).click();
-  await expect(page.getByRole('button', { name: 'Share screen' })).toBeVisible({
+  // The capsule, not Share screen: the stack serves http://tide:8080, which is
+  // not a secure context, so there is no screen capture and no share button.
+  await expect(page.getByRole('navigation', { name: 'Meeting controls' })).toBeVisible({
     timeout: 30_000
   });
   await expect
