@@ -226,6 +226,17 @@
     }
   }
 
+  // Escape puts the open sheet away, unless a menu, popover or dialog is open
+  // (that layer closes first) or it would throw away a chat draft. Checked in
+  // the capture phase, before any of those layers has handled the key.
+  function closeSheetOnEscape(event: KeyboardEvent): void {
+    if (event.key !== 'Escape' || !sheetOpen) return;
+    if (document.querySelector('[aria-expanded="true"], dialog[open], .record-confirm')) return;
+    if (event.target instanceof HTMLTextAreaElement && event.target.value) return;
+    peopleOpen = false;
+    chatOpen = false;
+  }
+
   function setParticipantMenu(identity: string, open: boolean): void {
     participantMenuIdentity = open ? identity : undefined;
   }
@@ -242,6 +253,8 @@
     return `width: ${rect.w}px; height: ${rect.h}px; transform: translate(${rect.x}px, ${rect.y}px)`;
   }
 </script>
+
+<svelte:window onkeydowncapture={closeSheetOnEscape} />
 
 <main
   class="stage"
@@ -741,8 +754,9 @@
   /* With a side sheet open the stage keeps to the space left of it. So does
      the dock: it is the capsule's container, and the capsule tightens to fit
      it (ControlBar), sliding over as the sheet comes in. The peek moves above
-     the capsule. */
-  @media (min-width: 640px) {
+     the capsule. Narrower than this the stage beside a sheet is a sliver, so
+     the sheet overlays it over a scrim instead (ChatPanel, ParticipantPanel). */
+  @media (min-width: 900px) {
     .stage[data-sheet-open] {
       padding-right: var(--sheet-room);
     }

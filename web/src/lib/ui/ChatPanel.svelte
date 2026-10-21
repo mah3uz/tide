@@ -6,7 +6,7 @@
   import MessageText from '#lib/chat/MessageText.svelte';
   import ChatImage from '#lib/chat/ChatImage.svelte';
   import { imageTypes } from '#lib/chat/images.js';
-  import { participantColor } from './participantColor.js';
+  import { initials, participantColor } from './participantColor.js';
 
   let { rtc, onclose }: { rtc: RoomState; onclose?: () => void } = $props();
 
@@ -61,17 +61,6 @@
     hourCycle: 'h23'
   });
   const fullDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
-
-  function initials(name: string): string {
-    const words = name.trim().split(/\s+/).filter(Boolean);
-    const letters = words.length > 1 ? [words[0], words.at(-1)!] : words;
-    return (
-      letters
-        .map((word) => Array.from(word)[0] ?? '')
-        .join('')
-        .toUpperCase() || '?'
-    );
-  }
 
   const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -729,10 +718,19 @@
     font-size: 12px;
   }
 
-  @media (max-width: 639px) {
+  /* Below 900px the stage does not make room for the sheet: it lies over a
+     scrim, as the people sheet does, and is opaque so the dimmed call does
+     not show through the messages. */
+  @media (max-width: 899.98px) {
+    .chat-sheet {
+      z-index: 31;
+      background: var(--surface);
+      backdrop-filter: none;
+    }
+
     .scrim {
       position: fixed;
-      z-index: 25;
+      z-index: 30;
       inset: 0;
       display: block;
       padding: 0;
@@ -741,7 +739,9 @@
       cursor: default;
       animation: fade-in var(--dur-2) var(--ease-out);
     }
+  }
 
+  @media (max-width: 639.98px) {
     .chat-sheet {
       top: 15vh;
       right: 0;
@@ -749,9 +749,7 @@
       left: 0;
       width: auto;
       max-width: none;
-      background: var(--surface);
       border-radius: var(--r-lg) var(--r-lg) 0 0;
-      backdrop-filter: none;
       animation: sheet-up var(--dur-3) var(--ease-out);
     }
 

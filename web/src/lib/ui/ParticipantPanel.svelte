@@ -3,7 +3,7 @@
   import { kick, muteParticipant } from '#lib/api/client.js';
   import type { LobbyRequestInfo } from '#lib/api/types.gen.js';
   import type { ParticipantView, RoomState } from '#lib/rtc/room.svelte.js';
-  import { participantColor } from './participantColor';
+  import { initials, participantColor } from './participantColor';
 
   let {
     rtc,
@@ -28,13 +28,6 @@
   let moderationError = $state('');
   let busyIdentity = $state('');
   let confirmIdentity = $state('');
-
-  function initials(name: string): string {
-    const words = name.trim().split(/\s+/).filter(Boolean);
-    const first = Array.from(words[0] ?? '')[0] ?? '';
-    const last = words.length > 1 ? (Array.from(words.at(-1) ?? '')[0] ?? '') : '';
-    return (first + last).toUpperCase() || '?';
-  }
 
   async function mute(participant: ParticipantView): Promise<void> {
     moderationError = '';
@@ -66,7 +59,7 @@
   }
 </script>
 
-<!-- On a phone the sheet rises over a scrim; a tap on it closes the sheet. -->
+<!-- Below 900px the sheet lies over a scrim; a tap on it closes the sheet. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="scrim" onclick={onclose}></div>
 <aside class="people-panel" aria-label="People">
@@ -165,7 +158,8 @@
 
 <style>
   /* The side-sheet contract shared with the chat sheet: fixed 16px in from
-     the top, right and bottom, 380px wide; a bottom sheet on a phone. */
+     the top, right and bottom, 380px wide; over a scrim below 900px, where
+     the stage does not make room for it; a bottom sheet on a phone. */
   .people-panel {
     position: fixed;
     z-index: 15;
@@ -422,18 +416,9 @@
     }
   }
 
-  @media (max-width: 639.98px) {
+  @media (max-width: 899.98px) {
     .people-panel {
       z-index: 31;
-      top: 15vh;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      width: auto;
-      max-width: none;
-      border-radius: var(--r-lg) var(--r-lg) 0 0;
-      padding-bottom: env(safe-area-inset-bottom);
-      animation-name: sheet-up;
     }
 
     .scrim {
@@ -443,6 +428,20 @@
       display: block;
       background: var(--scrim);
       animation: fade-in var(--dur-2) var(--ease-out);
+    }
+  }
+
+  @media (max-width: 639.98px) {
+    .people-panel {
+      top: 15vh;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      width: auto;
+      max-width: none;
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
+      padding-bottom: env(safe-area-inset-bottom);
+      animation-name: sheet-up;
     }
 
     .handle {

@@ -215,6 +215,11 @@ test('the stage names the room, and its details give the meeting link to copy', 
 
 const phone = { width: 320, height: 640 };
 
+const sheets = [
+  { name: 'People', open: 'Open people', close: 'Close people', other: 'Open chat' },
+  { name: 'Chat', open: 'Open chat', close: 'Close chat', other: 'Open people' }
+] as const;
+
 /** Fails unless the element is drawn wholly inside the viewport, `slack` px in from the sides. */
 async function expectInside(locator: Locator, slack = 0): Promise<void> {
   await expect(locator).toBeVisible();
@@ -300,19 +305,23 @@ test('on a phone the header keeps every chip on screen and clears the panels', a
 
   // On a phone an open panel is a bottom sheet: it rises from the bottom edge,
   // full width, and leaves the top of the screen showing above it.
-  await page.getByRole('button', { name: 'Open people' }).click();
-  await settled(page.getByRole('complementary', { name: 'People' }));
-  const panel = (await page.getByRole('complementary', { name: 'People' }).boundingBox())!;
-  expect(panel.x).toBe(0);
-  expect(panel.width).toBe(phone.width);
-  expect(Math.round(panel.y + panel.height)).toBe(phone.height);
-  expect(panel.y).toBeGreaterThanOrEqual(phone.height * 0.15 - 1);
-  // Its close button, and a tap on the dimmed stage, put it away again.
-  await page
-    .getByRole('complementary', { name: 'People' })
-    .getByRole('button', { name: 'Close', exact: true })
-    .click();
-  await expect(page.getByRole('complementary', { name: 'People' })).toBeHidden();
+  for (const { name, open } of sheets) {
+    const sheet = page.getByRole('complementary', { name });
+    await page.getByRole('button', { name: open }).click();
+    await settled(sheet);
+    const panel = (await sheet.boundingBox())!;
+    expect(panel.x, name).toBe(0);
+    expect(panel.width, name).toBe(phone.width);
+    expect(Math.round(panel.y + panel.height), name).toBe(phone.height);
+    expect(panel.y, name).toBeGreaterThanOrEqual(phone.height * 0.15 - 1);
+    // Its close button, and a tap on the dimmed stage, put it away again.
+    await sheet.getByRole('button', { name: /^Close/ }).click();
+    await expect(sheet, name).toBeHidden();
+    await page.getByRole('button', { name: open }).click();
+    await expect(sheet, name).toBeVisible();
+    await page.mouse.click(phone.width / 2, 40);
+    await expect(sheet, name).toBeHidden();
+  }
 });
 
 test('on a phone the capsule keeps the everyday controls and More holds the rest', async ({
@@ -411,33 +420,119 @@ test('names are in the UI font and the clock in mono, and roles are words, not b
   ).toBe(true);
 });
 
-test('beside an open side sheet the capsule keeps to the stage, never under the sheet', async ({
+test('from 900px the stage and capsule make room for an open sheet, never under it', async ({
   page
 }) => {
   await mockApi(page, state());
   await fakeSfu(page);
   await enter(page);
   const bar = page.getByRole('navigation', { name: 'Meeting controls' });
-  const sheet = page.getByRole('complementary', { name: 'People' });
+  const media = page.getByRole('region', { name: 'Meeting participants' });
 
-  // The host's full capsule is wider than the room a narrow tablet leaves
+  // The host's full capsule is wider than the room a small laptop leaves
   // beside the sheet; it tightens, then drops to the everyday controls.
-  for (const width of [640, 700, 820, 900, 1000, 1099, 1180]) {
-    await page.setViewportSize({ width, height: 800 });
-    if (!(await sheet.count())) await page.getByRole('button', { name: 'Open people' }).click();
+  for (const { name, open, close, other } of sheets) {
+    const sheet = page.getByRole('complementary', { name });
+    for (const width of [900, 1000, 1100, 1180]) {
+      await page.setViewportSize({ width, height: 800 });
+      if (!(await sheet.count())) await page.getByRole('button', { name: open }).click();
+      await settled(sheet);
+      await settled(bar.locator('..'));
+      const capsule = (await bar.boundingBox())!;
+      const panel = (await sheet.boundingBox())!;
+      const stage = (await media.boundingBox())!;
+      const where = `${name} at ${width}px: capsule x ${capsule.x}..${capsule.x + capsule.width}, stage to ${stage.x + stage.width}, sheet from ${panel.x}`;
+      expect(capsule.x, where).toBeGreaterThanOrEqual(0);
+      expect(capsule.x + capsule.width, where).toBeLessThanOrEqual(panel.x);
+      // Beside the sheet, not behind it: nothing of the call is hidden and
+      // nothing is dimmed, so both can be used at once.
+      expect(stage.x + stage.width, where).toBeLessThanOrEqual(panel.x);
+      await expect(page.locator('.scrim'), where).toBeHidden();
+      // Microphone, camera, people, chat and leave are always there.
+      for (const label of ['Unmute microphone', 'Turn camera on', close, other]) {
+        await expect(bar.getByRole('button', { name: label, exact: true }), where).toBeVisible();
+      }
+      await expect(bar.getByRole('button', { name: 'Leave or end meeting' }), where).toBeVisible();
+    }
+    await bar.getByRole('button', { name: close }).click();
+    await expect(sheet).toBeHidden();
+  }
+});
+
+test('below 900px an open sheet lies over the stage instead of squeezing it', async ({ page }) => {
+  const tablet = { width: 760, height: 900 };
+  await page.setViewportSize(tablet);
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  const bar = page.getByRole('navigation', { name: 'Meeting controls' });
+  const media = page.getByRole('region', { name: 'Meeting participants' });
+  const scrim = page.locator('.scrim');
+  await settled(bar.locator('..'));
+  const stageAlone = (await media.boundingBox())!;
+  const capsuleAlone = (await bar.boundingBox())!;
+
+  for (const { name, open } of sheets) {
+    const sheet = page.getByRole('complementary', { name });
+    await page.getByRole('button', { name: open }).click();
     await settled(sheet);
     await settled(bar.locator('..'));
-    const capsule = (await bar.boundingBox())!;
+
+    // Making room would leave the call a sliver beside a 380px sheet: the
+    // stage and capsule stay as they were and the sheet lies over them.
+    expect(await media.boundingBox(), name).toEqual(stageAlone);
+    expect(await bar.boundingBox(), name).toEqual(capsuleAlone);
     const panel = (await sheet.boundingBox())!;
-    const where = `at ${width}px the capsule spans x ${capsule.x}..${capsule.x + capsule.width}`;
-    expect(capsule.x, where).toBeGreaterThanOrEqual(0);
-    expect(capsule.x + capsule.width, where).toBeLessThanOrEqual(panel.x);
-    // Microphone, camera, people, chat and leave are always there.
-    for (const name of ['Unmute microphone', 'Turn camera on', 'Close people', 'Open chat']) {
-      await expect(bar.getByRole('button', { name, exact: true }), where).toBeVisible();
-    }
-    await expect(bar.getByRole('button', { name: 'Leave or end meeting' }), where).toBeVisible();
+    expect(panel.width, name).toBe(380);
+    expect(panel.x + panel.width, name).toBe(tablet.width - 16);
+
+    // A scrim dims the whole stage, so it reads as a layer on top, and a tap
+    // on it (here, on the stage left of the sheet) puts the sheet away.
+    await settled(scrim);
+    expect(await scrim.boundingBox(), name).toEqual({ x: 0, y: 0, ...tablet });
+    await page.mouse.click(40, tablet.height / 2);
+    await expect(sheet, name).toBeHidden();
+    await expect(scrim, name).toBeHidden();
+
+    // Escape puts it away too: with the capsule covered, it is the keyboard's
+    // way out besides the sheet's own close button.
+    await page.getByRole('button', { name: open }).click();
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(sheet, name).toBeHidden();
   }
+});
+
+test('Escape closes a menu over an open sheet first, and keeps a chat draft', async ({ page }) => {
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  const chat = page.getByRole('complementary', { name: 'Chat' });
+  await page.getByRole('button', { name: 'Open chat' }).click();
+
+  // One Escape, one layer: the device menu goes, the sheet stays.
+  await page.getByRole('button', { name: 'Choose microphone' }).click();
+  await expect(page.getByRole('button', { name: 'Choose microphone' })).toHaveAttribute(
+    'aria-expanded',
+    'true'
+  );
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Choose microphone' })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  );
+  await expect(chat).toBeVisible();
+
+  // Closing the sheet throws the draft away, so Escape in a written message
+  // does not; an empty composer lets it through.
+  const composer = chat.getByRole('textbox');
+  await composer.fill('Half a thought');
+  await page.keyboard.press('Escape');
+  await expect(chat).toBeVisible();
+  await expect(composer).toHaveValue('Half a thought');
+  await composer.fill('');
+  await page.keyboard.press('Escape');
+  await expect(chat).toBeHidden();
 });
 
 test('on a phone a chat peek never covers the strip’s faces or names', async ({ page }) => {
