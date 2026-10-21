@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.e2e.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.e2e.json && tsc -p tsconfig.sw.json && node scripts/check-css-vars.mjs",
+    "e2e:sw": "playwright test --config=playwright.sw.config.ts",
     "icons": "node scripts/brand-icons.mjs",
     "lint": "prettier --check .",
     "format": "prettier --write .",

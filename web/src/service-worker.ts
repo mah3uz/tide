@@ -30,12 +30,15 @@ sw.addEventListener('activate', (event) => {
   );
 });
 
+// The server answers a missing /_app/immutable/*.js with index.html and 200;
+// caching that under a script URL would break the app until the cache rolls.
 async function cacheFirst(request: Request): Promise<Response> {
   const cache = await caches.open(CACHE);
   const hit = await cache.match(request);
   if (hit) return hit;
   const res = await fetch(request);
-  if (res.ok) cache.put(request, res.clone());
+  const html = (res.headers.get('content-type') ?? '').includes('text/html');
+  if (res.ok && res.type === 'basic' && !html) cache.put(request, res.clone());
   return res;
 }
 
