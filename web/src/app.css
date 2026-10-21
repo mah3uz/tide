@@ -5,24 +5,51 @@
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
-/* Map the design tokens (single source, defined in :root below) onto Tailwind's
-   utility namespaces. Colors reference the :root vars so there is one source of
-   truth; radii/fonts are set here directly (their names collide with Tailwind
-   namespaces, so a var() alias would be self-referential). Spacing is pinned
-   to a 4px base (p-1=4…p-6=24, h-7=28): Tailwind's default is 0.25rem, which
-   the 13px root would shrink to 3.25px. */
+/* Map the design tokens (defined per theme on :root below) onto Tailwind's
+   utility namespaces, so `bg-surface`, `text-ink-3`, `rounded-md` follow the
+   theme. Spacing is pinned to a 4px base (p-1=4…p-6=24, h-10=40). */
 @theme {
   --spacing: 4px;
 
-  --color-paper: var(--paper);
+  --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
-  --color-border: var(--border);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-highlight: var(--highlight);
+  --color-on-highlight: var(--on-highlight);
+  --color-rec: var(--rec);
+  --color-rec-ink: var(--rec-ink);
+  --color-rec-soft: var(--rec-soft);
+  --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
 
+  --radius-pill: var(--r-pill);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --font-ui:
+    'Space Grotesk Variable', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  /* Legacy utilities (bg-paper, border-border, rounded-card, …) for the
+     components not yet restyled. Remove with the legacy block below. */
+  --color-paper: var(--paper);
+  --color-border: var(--border);
   --color-stage: var(--stage);
   --color-panel: var(--panel);
   --color-panel-2: var(--panel-2);
@@ -30,50 +57,155 @@
   --color-text: var(--text);
   --color-text-2: var(--text-2);
   --color-accent-d: var(--accent-d);
-
-  --color-rec: var(--rec);
-  --color-ok: var(--ok);
-  --color-warn: var(--warn);
-
-  --radius-control: 4px;
-  --radius-card: 6px;
-  --radius-tile: 8px;
-
-  --font-ui:
-    'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    sans-serif;
-  --font-mono: 'Geist Mono', 'SFMono-Regular', Consolas, monospace;
+  --radius-control: var(--r-sm);
+  --radius-card: var(--r-md);
+  --radius-tile: var(--r-md);
 }
 
 :root {
+  --r-pill: 999px;
+  --r-sm: 12px;
+  --r-md: 20px;
+  --r-lg: 28px;
+  --r-xl: 44px;
+
+  /* Motion house rules: animate only transform and opacity (a --dur-1 colour
+     fade on a hovered control is the one allowance); never transition layout
+     properties (width, height, top, margin…); no infinite animation unless
+     live state drives it (speaking, recording); nothing animates while
+     document.hidden. Reduced motion turns all of it off (below). */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+
   font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 450;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 400;
   color: var(--ink);
-  background: var(--paper);
+  background: var(--bg);
   font-synthesis: none;
+}
 
-  --paper: #f5f5f0;
-  --surface: #ecece6;
-  --surface-2: #e3e3db;
-  --border: #d8d8ce;
-  --ink: #171717;
-  --ink-2: #6e6e64;
-  --accent: #2320e6;
-  --accent-hover: #1b18c4;
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-  --stage: #0f0f0e;
-  --panel: #161615;
-  --panel-2: #1e1e1c;
-  --border-d: #2a2a27;
-  --text: #edede6;
-  --text-2: #8f8f85;
-  --accent-d: #5b58ff;
+  --bg: #070b0a;
+  --bg-glow: #10201a;
+  --surface: #0f1815;
+  --surface-2: #141e1b;
+  --line: rgb(231 239 233 / 8%);
+  --line-strong: rgb(231 239 233 / 14%);
 
-  --rec: #e5484d;
-  --ok: #4fa36f;
-  --warn: #d9a03f;
+  --ink: #e7efe9;
+  --ink-2: #b9c9c1;
+  --ink-3: #8fa39a;
+
+  --accent: #5ff0b0;
+  --accent-hover: #7af5c0;
+  --on-accent: #06120d;
+  --highlight: #d8f56a;
+  --on-highlight: #070b0a;
+  --speak-ring: #5ff0b0;
+  --speak-glow: rgb(95 240 176 / 10%);
+  --lens-from: #183028;
+  --lens-to: #0e1a16;
+
+  --rec: #ff5a5f;
+  --rec-ink: #ff8a8e;
+  --rec-soft: rgb(255 90 95 / 12%);
+  --danger: #ff5a5f;
+  --on-danger: #1a0607;
+  --ok: #5fd39a;
+  --warn: #f2c14e;
+
+  --mark-from: #4fe3b4;
+  --mark-to: #d8f56a;
+
+  --p1-bg: #234238;
+  --p1-fg: #d8f56a;
+  --p2-bg: #1d2a33;
+  --p2-fg: #c9d6d0;
+  --p3-bg: #2b2533;
+  --p3-fg: #d6c9e0;
+  --p4-bg: #332b1f;
+  --p4-fg: #e6d7b8;
+  --p5-bg: #1f2a24;
+  --p5-fg: #c9d6d0;
+
+  --shadow-float: 0 0 0 1px var(--line), 0 18px 48px rgb(0 0 0 / 40%);
+  --scrim: rgb(3 6 5 / 64%);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #e8ebe4;
+  --bg-glow: #f6f8f3;
+  --surface: #ffffff;
+  --surface-2: #eef1ea;
+  --line: rgb(19 32 27 / 8%);
+  --line-strong: rgb(19 32 27 / 14%);
+
+  --ink: #13201b;
+  --ink-2: #4b5953;
+  --ink-3: #5d6b64;
+
+  --accent: #0f3d30;
+  --accent-hover: #1a5442;
+  --on-accent: #ffffff;
+  --highlight: #c8ee52;
+  --on-highlight: #0f3d30;
+  --speak-ring: #c8ee52;
+  --speak-glow: rgb(200 238 82 / 22%);
+  --lens-from: #d9e5d9;
+  --lens-to: #c3d3c6;
+
+  --rec: #e5483f;
+  --rec-ink: #b0261f;
+  --rec-soft: #fde7e5;
+  /* Darker than --rec so white button text clears 4.5:1. */
+  --danger: #d63c33;
+  --on-danger: #ffffff;
+  --ok: #1a6b44;
+  --warn: #8a5a00;
+
+  --mark-from: #1fb98a;
+  --mark-to: #9ccc1f;
+
+  --p1-bg: #d6e2d6;
+  --p1-fg: #0f3d30;
+  --p2-bg: #dfe3ea;
+  --p2-fg: #2c3a52;
+  --p3-bg: #e6dfea;
+  --p3-fg: #4a3658;
+  --p4-bg: #ece4d6;
+  --p4-fg: #5b4625;
+  --p5-bg: #dde6e0;
+  --p5-fg: #1d4a3c;
+
+  --shadow-float:
+    0 0 0 1px var(--line), 0 18px 40px rgb(19 32 27 / 12%), 0 2px 6px rgb(19 32 27 / 6%);
+  --scrim: rgb(19 32 27 / 28%);
+}
+
+/* LEGACY ALIASES — old names for components not yet restyled; delete once
+   nothing reads them. Same-named tokens (--surface, --surface-2, --ink,
+   --ink-2, --accent, --accent-hover, --rec, --ok, --warn) keep their old
+   meaning under new values: --surface was already the card fill. Mapping:
+   paper→bg, border→line-strong, stage→bg, panel→surface, panel-2→surface-2,
+   border-d→line-strong, text→ink, text-2→ink-3, accent-d→accent. */
+:root {
+  --paper: var(--bg);
+  --border: var(--line-strong);
+  --stage: var(--bg);
+  --panel: var(--surface);
+  --panel-2: var(--surface-2);
+  --border-d: var(--line-strong);
+  --text: var(--ink);
+  --text-2: var(--ink-3);
+  --accent-d: var(--accent);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -81,9 +213,7 @@
   --space-4: 16px;
   --space-6: 24px;
   --control-height: 28px;
-  --motion-fast: 120ms ease-out;
-  /* --radius-* and --font-* now come from the @theme block above (single
-     source; also generates rounded-card / font-mono utilities). */
+  --motion-fast: var(--dur-1) var(--ease-out);
 }
 
 * {
@@ -95,10 +225,6 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100%;
-}
-
-body {
-  background: var(--paper);
 }
 
 /* In the base layer, so a text or font utility on a control wins over the
@@ -118,7 +244,7 @@ button {
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--focus-ring, var(--accent));
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .mono {
@@ -129,12 +255,25 @@ button {
   min-height: 100dvh;
 }
 
+/* The soft radial ground, on a fixed layer of its own so scrolling never
+   repaints it. */
+.app-shell::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  content: '';
+  background: radial-gradient(120% 90% at 50% 35%, var(--bg-glow), var(--bg) 70%);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
-  *::after {
+  *::after,
+  ::backdrop {
     scroll-behavior: auto !important;
     transition-duration: 0ms !important;
     animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

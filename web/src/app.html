@@ -1,9 +1,31 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#F5F5F0" />
+    <meta name="theme-color" content="#070b0a" />
+    <script>
+      // Before first paint, so the page never flashes the wrong theme. The
+      // recorder's page is always dark. Mirrors lib/ui/theme.svelte.ts.
+      (function () {
+        var preference = 'system';
+        try {
+          preference = localStorage.getItem('tide-theme') || 'system';
+        } catch (e) {}
+        var theme =
+          location.pathname === '/egress-template'
+            ? 'dark'
+            : preference === 'light' || preference === 'dark'
+              ? preference
+              : matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+        document.documentElement.dataset.theme = theme;
+        document
+          .querySelector('meta[name="theme-color"]')
+          .setAttribute('content', theme === 'dark' ? '#070b0a' : '#e8ebe4');
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

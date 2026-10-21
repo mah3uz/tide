@@ -2,10 +2,9 @@
   import type { Snippet } from 'svelte';
   import { X } from 'phosphor-svelte';
 
-  // A modal on the light shell (ARCHITECTURE.md §10): the native <dialog>
-  // opened with showModal(), so the page behind is inert (focus stays
-  // inside), Escape closes it and focus returns to the opener. 6px radius,
-  // 1px border and the one elevation dialogs are allowed.
+  // The native <dialog> opened with showModal(), so the page behind is inert
+  // (focus stays inside), Escape closes it and focus returns to the opener.
+  // It fades and settles in on open and closes at once.
   let {
     open = $bindable(false),
     title,
@@ -107,18 +106,43 @@
     padding: 0;
     overflow: auto;
     color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    box-shadow: 0 8px 24px rgb(23 23 23 / 14%);
+    background: var(--surface);
+    border: 0;
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-float);
+  }
+
+  dialog[open] {
+    animation: dialog-in var(--dur-2) var(--ease-out);
   }
 
   dialog::backdrop {
-    background: rgb(23 23 23 / 24%);
+    background: rgb(3 6 5 / 64%);
+  }
+
+  :global([data-theme='light']) dialog::backdrop {
+    background: rgb(19 32 27 / 28%);
+  }
+
+  dialog[open]::backdrop {
+    animation: backdrop-in var(--dur-2) var(--ease-out);
+  }
+
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+
+  @keyframes backdrop-in {
+    from {
+      opacity: 0;
+    }
   }
 
   .panel {
-    padding: 12px;
+    padding: 20px;
   }
 
   header {
@@ -126,30 +150,31 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin: -4px 0 12px;
+    margin: -2px 0 16px;
   }
 
   h2 {
     margin: 0;
-    font-size: 15px;
-    line-height: 20px;
-    font-weight: 550;
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   .close {
     display: grid;
-    width: var(--control-height);
-    height: var(--control-height);
-    margin-right: -6px;
+    width: 32px;
+    height: 32px;
+    margin: -4px -6px -4px 0;
     padding: 0;
     place-items: center;
-    color: var(--ink-2);
+    color: var(--ink-3);
     background: transparent;
     border: 0;
-    border-radius: var(--radius-control);
+    border-radius: var(--r-pill);
     transition:
-      color var(--motion-fast),
-      background var(--motion-fast);
+      color var(--dur-1) var(--ease-out),
+      background-color var(--dur-1) var(--ease-out);
   }
 
   .close:hover:enabled {

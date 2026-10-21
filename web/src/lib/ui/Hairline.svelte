@@ -12,8 +12,7 @@
     z-index: 100;
     inset: 0 0 auto;
     height: 2px;
-    background: var(--accent);
-    transition: background var(--motion-fast);
+    background: linear-gradient(90deg, var(--mark-from), var(--mark-to));
   }
 
   .reconnecting {
@@ -21,19 +20,15 @@
   }
 
   .offline {
-    background: var(--ink-2);
+    background: var(--ink-3);
   }
 
   .recording {
     background: var(--rec);
-    animation: recording-pulse 2s ease-in-out infinite;
+    animation: recording-pulse 2s var(--ease-in-out) infinite;
   }
 
   @keyframes recording-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
     50% {
       opacity: 0.45;
     }
