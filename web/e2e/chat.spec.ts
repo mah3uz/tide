@@ -90,11 +90,16 @@ test.describe('chat messages from other participants', () => {
     await page.getByRole('button', { name: 'Open chat' }).click();
   }
 
-  function receive(page: Page, text: string, from = 'Mallory Guest'): Promise<void> {
+  function receive(
+    page: Page,
+    text: string,
+    from = 'Mallory Guest',
+    identity = `guest:${from}`
+  ): Promise<void> {
     return page.evaluate(
-      ({ text, from }) => {
+      ({ text, from, identity }) => {
         const payload = new TextEncoder().encode(JSON.stringify({ text, ts: Date.now() }));
-        const sender = { identity: `guest:${from}`, name: from };
+        const sender = { identity, name: from };
         (window as unknown as RoomWindow).__tideRoom.emit(
           'dataReceived',
           payload,
@@ -103,9 +108,22 @@ test.describe('chat messages from other participants', () => {
           'chat'
         );
       },
-      { text, from }
+      { text, from, identity }
     );
   }
+
+  test('two people with the same name are never merged into one sender', async ({ page }) => {
+    await openChat(page);
+    await receive(page, 'from the first Sam', 'Sam', 'guest:sam-1');
+    await receive(page, 'from the second Sam', 'Sam', 'guest:sam-2');
+    await receive(page, 'the second Sam again', 'Sam', 'guest:sam-2');
+
+    // Grouping by display name would show these as one person's three messages,
+    // letting a guest pass their words off as someone else's.
+    const chat = page.getByRole('complementary', { name: 'Chat' });
+    await expect(chat.getByText('the second Sam again')).toBeVisible();
+    await expect(chat.getByText('Sam', { exact: true })).toHaveCount(2);
+  });
 
   test('markdown renders as formatting, and a bare URL becomes a link to itself', async ({
     page

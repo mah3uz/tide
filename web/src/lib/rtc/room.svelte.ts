@@ -65,6 +65,8 @@ export interface PreJoinOptions extends JoinMediaOptions {
 
 export interface ChatMessage {
   from: string;
+  /** The sender's LiveKit identity; display names can repeat. */
+  identity: string;
   /** Empty for an image message. */
   text: string;
   ts: number;
@@ -735,6 +737,7 @@ export class RoomState {
     );
     this.appendChat({
       from: this.room.localParticipant.name || this.room.localParticipant.identity,
+      identity: this.room.localParticipant.identity,
       text: payload.text,
       ts: payload.ts,
       mine: true
@@ -1593,6 +1596,7 @@ export class RoomState {
       }
       this.appendChat({
         from: participant?.name || participant?.identity || 'Guest',
+        identity: participant?.identity ?? '',
         text: decoded.text,
         ts: decoded.ts,
         mine: participant?.identity === this.room.localParticipant.identity

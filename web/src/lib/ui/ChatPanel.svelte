@@ -45,6 +45,7 @@
         current &&
         previous &&
         previous.mine === message.mine &&
+        previous.identity === message.identity &&
         previous.from === message.from &&
         message.ts - previous.ts < groupWindow;
       if (continues) current!.messages.push(message);
@@ -263,8 +264,8 @@
             <div class="group" in:enter>
               <span
                 class="disc"
-                style:--disc-bg={`var(--p${participantColor(group.first.from)}-bg)`}
-                style:--disc-fg={`var(--p${participantColor(group.first.from)}-fg)`}
+                style:--disc-bg={`var(--p${participantColor(group.first.identity || group.first.from)}-bg)`}
+                style:--disc-fg={`var(--p${participantColor(group.first.identity || group.first.from)}-fg)`}
                 aria-hidden="true">{initials(group.first.from)}</span
               >
               <div class="stack">

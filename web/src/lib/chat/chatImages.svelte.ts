@@ -81,6 +81,7 @@ export class ChatImages {
       const local = this.room.localParticipant;
       this.append({
         from: local.name || local.identity,
+        identity: local.identity,
         text: '',
         ts: Date.now(),
         mine: true,
@@ -101,6 +102,7 @@ export class ChatImages {
     const sender = this.room.getParticipantByIdentity(image.identity);
     this.append({
       from: sender?.name || image.identity || 'Guest',
+      identity: image.identity,
       text: '',
       ts: Date.now(),
       mine: image.identity === this.room.localParticipant.identity,
