@@ -20,7 +20,8 @@ export default defineConfig({
     tailwindcss(),
     sveltekit({
       preprocess: vitePreprocess(),
-      adapter: adapter({ fallback: 'index.html' })
+      adapter: adapter({ fallback: 'index.html' }),
+      serviceWorker: { register: false }
     }),
     noWatchInCI
   ],

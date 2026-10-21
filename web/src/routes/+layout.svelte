@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
   import { page } from '$app/state';
   import { connectionChrome } from '#lib/rtc/connection.svelte.js';
+  import { registerServiceWorker } from '#lib/pwa/register.js';
   import Hairline from '#lib/ui/Hairline.svelte';
   import '@fontsource-variable/inter';
   import '@fontsource/geist-mono/400.css';
@@ -9,6 +10,8 @@
 
   let { children }: { children: Snippet } = $props();
   let isEgressTemplate = $derived(page.url.pathname === '/egress-template');
+
+  onMount(registerServiceWorker);
 </script>
 
 <div class="app-shell">
