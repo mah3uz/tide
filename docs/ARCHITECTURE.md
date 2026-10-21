@@ -1,5 +1,7 @@
 # tide — Architecture
 
+> **Fork:** this fork's design language and feature additions are in [FORK.md](FORK.md); it replaces §10 and adds to §1, §9 and §12.
+
 tide is a lean, self-hosted video meeting product. It does few things well:
 meeting URLs, host auth (OIDC, or none at all — §4.1), a guest lobby,
 mic/cam/screen controls, device selection, a participant list with moderation,
@@ -31,11 +33,6 @@ Everything else is out of scope by design. Feature restraint is the product.
   Transcripts were admitted as part of recording management, on one
   condition that stays load-bearing: no model runs on the server. Heavy
   compute happens on machines the recording's owner paired (§8.1).
-  This fork's other additions, each deliberately small: an installable PWA
-  (web manifest plus a service worker that caches the app shell and static
-  assets only, never `/api`, `/rtc` or any media), a screen-share popout
-  (§9), minimal markdown in chat, and images in chat behind
-  `TIDE_CHAT_IMAGES` (§9). File transfer in general stays out.
 
 ## 2. System architecture
 
@@ -621,28 +618,6 @@ livekit-client. Chat is a thin layer on LiveKit data messages (topic `chat`),
 ephemeral by design: no history, no persistence, late joiners see only what
 arrives after them.
 
-Chat text supports minimal markdown: `**bold**`, `*italic*` or `_italic_`,
-`~~strike~~`, `` `inline code` ``, fenced code blocks, and bare http(s) links
-(which open with `noopener noreferrer nofollow`). Not supported, on purpose:
-`[text](url)` links, because with guests in the room a link must show where it
-goes; and headings, lists, quotes, tables, images and raw HTML. A message is
-parsed to data (`lib/chat/markdown.ts`) and rendered as Svelte elements, so no
-message can inject markup.
-
-Images in chat are off unless `TIDE_CHAT_IMAGES=true` (§12; read from the
-room's public info, so guests get it too). PNG, JPEG, WebP and GIF only: the
-sender's browser re-encodes to at most 2048px on the long side and 2 MB,
-dropping metadata, and receivers check magic numbers and dimensions before
-showing anything. Images travel as LiveKit data messages (topic `chat-image`),
-are held in browser memory only, and vanish with the meeting; tide never
-receives or stores them. This is not a file-transfer feature and does not
-open one.
-
-Screen share popout: a share can be lifted out of the page into a small
-window, using Document Picture-in-Picture where the browser has it, the
-video alone in system picture-in-picture, or WebKit's presentation mode
-(`lib/rtc/sharePopout.ts`).
-
 Meeting chrome:
 
 - **Top left** of the stage: the wall clock (`HH:MM` in the viewer's locale,
@@ -734,89 +709,72 @@ the feature list is frozen (§1).
 
 ## 10. Design language
 
-Calm, small, precise. Text is minimal: controls are icon-first
-(phosphor-svelte) with tooltips; words appear where they carry information.
+Cursor-grade density with Convex Works' materials: ivory paper, near-black ink,
+one electric blue. Calm, small, precise. Text is minimal — controls are
+icon-first (phosphor-svelte) with tooltips; words appear where they carry
+information.
 
-**Two themes, one layout.** Light and dark share every layout and component;
-only token values differ. The theme follows the system
-(`prefers-color-scheme`) and the toggle in the header overrides it. Picking
-what the system already shows stores "system", so the app keeps following it.
-An inline script in `app.html` applies the choice before first paint
-(`<html data-theme>`), and `lib/ui/theme.svelte.ts` keeps it in step. The
-recorder's page (`/egress-template`) is always dark. Dark is the default
-before any signal.
+**Two surfaces.** The shell (dashboard, pre-join, settings) is light — paper
+and ink. The meeting stage is near-black so video tiles carry the color.
+Both share the same accent and geometry, so the room reads as the same product
+with the lights dimmed.
 
-**Tokens** are semantic CSS custom properties in `web/src/app.css`, defined per
-theme (`:root, :root[data-theme='dark']` and `:root[data-theme='light']`) and
-mapped onto Tailwind utilities in its `@theme` block. Components use the
-semantic name, never a hex value:
+Tokens:
 
-- Ground and surfaces: `--bg`, `--bg-glow`, `--surface`, `--surface-2`,
-  `--line`, `--line-strong`, `--scrim`, `--shadow-float`.
-- Ink: `--ink`, `--ink-2`, `--ink-3` (primary, secondary, tertiary text).
-- Accent: `--accent`, `--accent-hover`, `--on-accent` (primary actions, focus,
-  one green accent); `--highlight`, `--on-highlight` (lime, for emphasis).
-- Stage: `--speak-ring`, `--speak-glow`, `--lens-from`, `--lens-to`.
-- State: `--rec`, `--rec-ink`, `--rec-soft`, `--danger`, `--on-danger`, `--ok`,
-  `--warn`.
-- Brand and avatars: `--mark-from`, `--mark-to`, and `--p1-bg`/`--p1-fg` to
-  `--p5-bg`/`--p5-fg` for participant colours.
+```css
+/* shell (light) */
+--paper: #f5f5f0; /* app background */
+--surface: #ecece6; /* cards, inputs */
+--surface-2: #e3e3db; /* hover, wells */
+--border: #d8d8ce;
+--ink: #171717;
+--ink-2: #6e6e64; /* secondary text */
+--accent: #2320e6; /* the blue — links, primary actions, focus */
+--accent-hover: #1b18c4;
 
-`npm run check` fails on any `var(--x)` with no fallback and no definition
-(`web/scripts/check-css-vars.mjs`), because CSS drops an undefined variable
-silently.
+/* stage (dark, in-meeting) */
+--stage: #0f0f0e;
+--panel: #161615; /* side panels, control bar */
+--panel-2: #1e1e1c;
+--border-d: #2a2a27;
+--text: #edede6; /* warm off-white, echoes paper */
+--text-2: #8f8f85;
+--accent-d: #5b58ff; /* accent lightened for dark ground */
 
-Typography: **Space Grotesk** (variable) for all UI, base 14px/1.45, and
-**JetBrains Mono** (variable) for anything machine-flavored: room slugs,
-timers, participant counts, keyboard shortcuts. Both are self-hosted through
-`@fontsource-variable` packages; nothing loads from a font CDN. Words people
-read in the meeting (the clock, names, "(You)") stay in Space Grotesk.
+/* semantic (both surfaces) */
+--rec: #e5484d; /* recording */
+--ok: #4fa36f;
+--warn: #d9a03f;
+```
+
+Typography: **Inter** (variable) for all UI — base 13px/20px, weights 450/550,
+scale 11 / 12.5 / 13 / 15 / 18, with 24px reserved for the pre-join room name.
+**Geist Mono** for anything machine-flavored: room slugs being edited,
+participant counts, keyboard shortcuts. Words people read in the meeting —
+the clock, names, "(You)" — stay in Inter.
 
 **Roles are words, not badges.** No pills or outlined chips for roles: the
 local participant is "Name (You)" and the host carries a secondary line,
-"Meeting host", in `--ink-3` (Meet's pattern). The pre-join account line
+"Meeting host", in `--text-2` (Meet's pattern). The pre-join account line
 says "· Host" in secondary ink. The human room name is shown during join and lobby
 transitions and in the stage's top-left cluster (§9); room slugs are kept out
 of the meeting UI except inside the meeting URL in its details popover.
 
-Geometry: 4px spacing base. Radii are a scale of tokens, `--r-sm` 12px,
-`--r-md` 20px, `--r-lg` 28px, `--r-xl` 44px and `--r-pill`, used as
-`rounded-sm` to `rounded-xl`; controls sit at the small end, the stage lens and
-sheets at the large end. Elevation is one shadow, `--shadow-float`, for
-menus, sheets and dialogs.
+Geometry: 4px spacing base; controls 28px tall; panel padding 12px; gaps 8px;
+radius 4px (controls), 6px (cards/panels), 8px (video tiles). Borders are 1px,
+always; no shadows except a single elevation for menus/dialogs.
 
 Icons: phosphor-svelte, 16px, regular weight everywhere (20px only on pre-join
-device controls). No filled/duotone or bold variants.
+device controls). No filled/duotone variants.
 
-**The brand mark** is isolated in `lib/ui/BrandMark.svelte` (the in-app logo)
-and `web/static/brand/app-icon.svg` (the source of the PWA and favicon
-images). Swapping the logo touches those two files; `npm run icons` regenerates
-the PNG icons from the SVG.
+**Signature — the hairline.** A 2px line across the very top of the app chrome
+(inherited from the Convex Works site) that doubles as the status channel:
+accent blue when idle/connected, amber while reconnecting, pulsing `--rec` red
+while the room is being recorded. State lives in the chrome, not in a toast.
 
-**The Orbit stage.** The most recent remote speaker fills the **lens**; everyone
-else, you included, is a **portal** around it. The **grid** view (the view
-toggle) lays everyone out evenly instead. When someone shares their screen the
-**share frame** takes the stage, with a **popout** that lifts the share into a
-small window of its own (§9). On a phone (<640px) the lens fills the width and
-the portals scroll in a **strip** beneath it, with secondary controls in a
-**More** sheet. Side panels (people, chat) are **sheets**: docked beside the
-stage at 900px and wider, an overlay at 640 to 899px, a bottom sheet below
-640px.
-
-**Signature: the hairline.** A 2px line across the very top of the app chrome
-that doubles as the status channel: the brand gradient (`--mark-from` to
-`--mark-to`) when idle or connected, amber while reconnecting, grey when
-offline, pulsing `--rec` red while the room is being recorded. State lives in
-the chrome, not in a toast.
-
-**Motion house rules.** Animate only `transform` and `opacity` (a `--dur-1`
-colour fade on a hovered control is the one allowance); never transition
-layout properties. Durations are `--dur-1` 120ms, `--dur-2` 200ms and
-`--dur-3` 320ms, with `--ease-out` and `--ease-in-out`. Nothing loops unless
-live state drives it (speaking, recording), and nothing animates while the
-document is hidden. `prefers-reduced-motion` zeroes every transition and
-animation (one rule in `app.css`); the recording hairline becomes a static red
-line.
+Motion: 120ms ease-out on hovers and panel slides; the only ambient animation
+permitted is the recording hairline pulse (2s); `prefers-reduced-motion`
+disables it in favor of a static red line.
 
 Voice: sentence case, plain verbs, no filler. "Start recording" → toast
 "Recording started". Errors say what happened and what to do next.
@@ -857,7 +815,7 @@ TIDE_RECORDER_REDIS_ADDR=127.0.0.1:6379  TIDE_RECORDER_REDIS_PASSWORD=…
 TIDE_TRUSTED_PROXIES=…          TIDE_DEV_MODE=false
 TIDE_JOIN_RATE_LIMIT=10         TIDE_WAIT_RATE_LIMIT=20
 TIDE_LOGIN_RATE_LIMIT=10        TIDE_PAIR_RATE_LIMIT=10
-TIDE_TRANSCRIPTS=false           TIDE_CHAT_IMAGES=false
+TIDE_TRANSCRIPTS=false
 ```
 
 **Every variable is optional.** `tide` with an empty environment is an

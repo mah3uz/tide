@@ -1,6 +1,6 @@
 name: tide
 
-# tide on Dokploy (docs/DEPLOYMENT.md#run-on-dokploy). Dokploy writes the
+# tide on Dokploy (docs/FORK.md). Dokploy writes the
 # Environment tab to .env beside this file; tide reads all of it, and Compose
 # interpolates the recorder's configuration from it. Recording is the
 # `recording` profile: COMPOSE_PROFILES=recording in that .env turns it on.
