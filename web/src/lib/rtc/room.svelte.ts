@@ -20,7 +20,7 @@ import {
 } from '#lib/sounds.js';
 import { setConnectionChrome } from './connection.svelte';
 import { ChatImages } from '#lib/chat/chatImages.svelte.js';
-import type { ChatImage } from '#lib/chat/images.js';
+import { maximumImageBytes, type ChatImage } from '#lib/chat/images.js';
 import { projectParticipants, type MediaSubscriptionFailure, type ParticipantView } from './media';
 import {
   DeviceSwitchError,
@@ -185,7 +185,13 @@ export class RoomState {
   // with zero packetsLost for 25 s, while that same peer's audio flowed
   // normally. Video-only, publisher-side, never recovering: a layer that was
   // paused when the subscriber left and not resumed when it came back.
-  readonly room = new Room({ adaptiveStream: false, dynacast: false });
+  // The payload cap bounds what one incoming data stream may inflate to; its
+  // 5 GB default would let a compressed chat image take a tab's memory.
+  readonly room = new Room({
+    adaptiveStream: false,
+    dynacast: false,
+    dataStream: { maxPayloadByteLength: maximumImageBytes }
+  });
 
   connectionState = $state<ConnectionState>(ConnectionState.Disconnected);
   participants = $state<ParticipantView[]>([]);
@@ -197,7 +203,7 @@ export class RoomState {
   activeSpeakerIdentities = $state<string[]>([]);
   chat = $state<ChatMessage[]>([]);
   chatRevision = $state(0);
-  readonly images = new ChatImages(this.room, (message) => this.appendChat(message));
+  readonly images = new ChatImages(this.room, (message, quiet) => this.appendChat(message, quiet));
   disconnectReason = $state<DisconnectReason>();
   wasRemoved = $state(false);
   canPlaybackAudio = $state(true);
@@ -1606,10 +1612,11 @@ export class RoomState {
     }
   }
 
-  private appendChat(message: ChatMessage): void {
+  private appendChat(message: ChatMessage, quiet = false): void {
     const chat = [...this.chat, message];
     for (const dropped of chat.slice(0, -maximumChatMessages)) this.images.release(dropped);
     this.chat = chat.slice(-maximumChatMessages);
+    if (quiet) return;
     this.chatRevision += 1;
     if (!message.mine) playNewMessageSound();
   }

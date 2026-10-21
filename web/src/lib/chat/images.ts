@@ -6,26 +6,39 @@ export const chatImageTopic = 'chat-image';
 export const maximumImageBytes = 2 * 1024 * 1024;
 /** A source larger than this is refused before it is decoded. */
 export const maximumSourcePixels = 40_000_000;
-/** Sent images are scaled so their long side is at most this. */
+/** Sent images are scaled so their long side is at most this; a received one past it is dropped. */
 export const maximumLongSide = 2048;
-/** Received images wider or taller than this are dropped. */
-export const maximumReceivedSide = 4096;
+/** One image per sender this often: the sender waits, and a receiver drops what comes sooner. */
+export const imageSpacing = 5_000;
 
+/** What may be picked to send; each is re-encoded as a SentImageType first. */
 export const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
 export type ImageType = (typeof imageTypes)[number];
+/** What tide sends, and so all that a receiver accepts. */
+export const sentImageTypes = ['image/webp', 'image/jpeg'] as const;
+export type SentImageType = (typeof sentImageTypes)[number];
 
-export interface ChatImage {
+export interface ShownImage {
+  kind: 'image';
+  /** Empty once its memory has been given back. */
   url: string;
   width: number;
   height: number;
-  mimeType: ImageType;
+  mimeType: SentImageType;
   size: number;
 }
+
+/** Stands in the log for images a receiver dropped. */
+export interface WithheldImages {
+  kind: 'withheld';
+}
+
+export type ChatImage = ShownImage | WithheldImages;
 
 export interface PreparedImage {
   blob: Blob;
   bytes: Uint8Array;
-  mimeType: ImageType;
+  mimeType: SentImageType;
   width: number;
   height: number;
 }
@@ -33,8 +46,8 @@ export interface PreparedImage {
 /** A refusal whose message is fit to show the person who picked the image. */
 export class ChatImageError extends Error {}
 
-export function isImageType(value: string): value is ImageType {
-  return (imageTypes as readonly string[]).includes(value);
+export function isSentImageType(value: string): value is SentImageType {
+  return (sentImageTypes as readonly string[]).includes(value);
 }
 
 /** The type the bytes really are, from their magic number; a declared type is never trusted. */
@@ -254,13 +267,13 @@ async function draw(
 }
 
 /**
- * Whether received bytes are the image they claim to be and small enough to
- * show: the magic number must match the declared type, the header's size
- * must fit before anything decodes it, and the browser must decode it.
+ * Whether received bytes are an image tide could have sent: the magic number
+ * must match the declared type, the header's size must fit before anything
+ * decodes it, a WebP must be a still, and the browser must decode it.
  */
 export async function checkReceivedImage(
   bytes: Uint8Array<ArrayBuffer>,
-  declaredType: ImageType
+  declaredType: SentImageType
 ): Promise<{ blob: Blob; width: number; height: number } | undefined> {
   if (bytes.length === 0 || bytes.length > maximumImageBytes) return undefined;
   if (sniffImageType(bytes) !== declaredType) return undefined;
@@ -269,11 +282,13 @@ export async function checkReceivedImage(
     !declared ||
     declared.width < 1 ||
     declared.height < 1 ||
-    declared.width > maximumReceivedSide ||
-    declared.height > maximumReceivedSide
+    declared.width > maximumLongSide ||
+    declared.height > maximumLongSide
   ) {
     return undefined;
   }
+  // An <img> plays every frame of an animated WebP, though the check below decodes only the first.
+  if (declaredType === 'image/webp' && isAnimatedWebp(bytes)) return undefined;
   const blob = new Blob([bytes], { type: declaredType });
   let bitmap: ImageBitmap;
   try {
@@ -283,8 +298,14 @@ export async function checkReceivedImage(
   }
   const { width, height } = bitmap;
   bitmap.close();
-  if (width > maximumReceivedSide || height > maximumReceivedSide) return undefined;
+  if (width > maximumLongSide || height > maximumLongSide) return undefined;
   return { blob, width, height };
+}
+
+// Only the extended (VP8X) format can animate; its flags byte says whether it does.
+function isAnimatedWebp(bytes: Uint8Array): boolean {
+  const vp8x = [0x56, 0x50, 0x38, 0x58].every((value, index) => bytes[12 + index] === value);
+  return vp8x && (bytes[20] & 0x02) !== 0;
 }
 
 const extensions: Record<ImageType, string> = {
@@ -315,7 +336,12 @@ export function downloadName(sender: string, ts: number, type: ImageType): strin
 export function chatMessagePreview(message: {
   from: string;
   text: string;
-  image?: unknown;
+  image?: ChatImage;
 }): string {
+  if (message.image?.kind === 'withheld') return withheldNotice(message.from);
   return message.image ? `${message.from} sent an image` : message.text;
+}
+
+export function withheldNotice(from: string): string {
+  return `Some images from ${from} weren't shown`;
 }
