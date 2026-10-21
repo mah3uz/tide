@@ -1,0 +1,96 @@
+name: tide
+
+# tide on Dokploy (docs/DEPLOYMENT.md#run-on-dokploy). Dokploy writes the
+# Environment tab to .env beside this file; tide reads all of it, and Compose
+# interpolates the recorder's configuration from it. Recording is the
+# `recording` profile: COMPOSE_PROFILES=recording in that .env turns it on.
+#
+# Unlike the host-network compose in the guide, tide sits on a bridge network
+# so Dokploy's Traefik reaches it over dokploy-network, which Dokploy attaches
+# when a domain is added. This is the topology the media gate tests
+# (deploy/media-test): Redis by name, the recorder in tide's network namespace.
+
+services:
+  tide:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      TIDE_ADDR: :8080
+      TIDE_DB_PATH: /data/tide.db
+      TIDE_RECORDER_REDIS_ADDR: redis:6379
+      # The recorder shares tide's network namespace.
+      TIDE_RECORDER_TEMPLATE_URL: http://127.0.0.1:8080/egress-template
+    # Media bypasses Traefik: browsers send it straight to the host. The
+    # container ports must equal the host ports, since tide advertises its own.
+    ports:
+      - "7882:7882/udp"
+      - "7881:7881/tcp"
+    volumes:
+      - tide-data:/data
+    # Listed so Dokploy appends dokploy-network rather than replacing it.
+    networks: [tide]
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+  # Nothing durable, and never on dokploy-network: recording jobs carry the S3
+  # credentials. The password goes to Redis through a file, not its command
+  # line.
+  redis:
+    image: redis:7.4.8-alpine3.21
+    profiles: [recording]
+    user: "999:1000"
+    environment:
+      REDISCLI_AUTH: ${TIDE_RECORDER_REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -ec
+      - |
+        umask 077
+        printf 'requirepass %s\n' "$$REDISCLI_AUTH" > /tmp/redis.conf
+        exec redis-server /tmp/redis.conf --port 6379 --save '' --appendonly no
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 2s
+      retries: 30
+    networks: [tide]
+    restart: unless-stopped
+
+  # Signals at the media server on tide's loopback and reaches Redis through
+  # tide's network. tide serves /healthz only once its media server is up.
+  recorder:
+    image: livekit/egress:v1.13.0
+    profiles: [recording]
+    network_mode: service:tide
+    depends_on:
+      redis:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        until wget -q -O /dev/null http://127.0.0.1:8080/healthz; do sleep 1; done;
+        exec /entrypoint.sh
+    environment:
+      LIVEKIT_API_KEY: ${TIDE_MEDIA_API_KEY:-}
+      LIVEKIT_API_SECRET: ${TIDE_MEDIA_API_SECRET:-}
+      EGRESS_CONFIG_BODY: |
+        ws_url: ws://127.0.0.1:7880
+        redis:
+          address: redis:6379
+          password: "${TIDE_RECORDER_REDIS_PASSWORD:-}"
+        health_port: 8081
+    cap_add: [SYS_ADMIN]
+    security_opt: [seccomp:unconfined]
+    shm_size: 1gb
+    tmpfs:
+      - /recordings:mode=1777
+    # A tide restart replaces the namespace this joined; restarting rejoins.
+    restart: unless-stopped
+
+networks:
+  tide:
+
+volumes:
+  tide-data:

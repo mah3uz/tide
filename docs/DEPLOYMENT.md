@@ -6,10 +6,10 @@ video. A deployment without recording is that one process. Recording adds the
 recorder (headless Chrome and GStreamer) and the Redis it and tide's media
 server share, beside tide, plus an S3-compatible bucket it writes to.
 
-This guide covers three ways to run it: [the binary on a
+This guide covers four ways to run it: [the binary on a
 server](#run-the-binary-on-a-server) behind a TLS proxy, [Docker
-Compose](#run-with-docker-compose) with the recorder, and [the Kubernetes
-reference base](#kubernetes). The design behind it is
+Compose](#run-with-docker-compose) with the recorder,
+[Dokploy](#run-on-dokploy), and [the Kubernetes reference base](#kubernetes). The design behind it is
 [Architecture §2.1](ARCHITECTURE.md#21-one-binary-modes-and-the-embedded-media-server).
 
 ## Choose a mode
@@ -298,6 +298,64 @@ Leave `TIDE_MEDIA_NODE_IP` unset unless discovery can't find the right
 address: unset, the recorder connects to media through tide's own address.
 Set, it must be one of the host's own addresses or reach the host back, or
 recordings can't connect ([The media address](#the-media-address)).
+
+## Run on Dokploy
+
+`deploy/dokploy/compose.yaml` builds tide from this repository and runs it
+behind Dokploy's Traefik, with Redis and the recorder under the `recording`
+profile. Unlike the compose above, tide sits on a bridge network, because
+Traefik reaches it over `dokploy-network`. Media still bypasses the proxy:
+7882/udp and 7881/tcp are published on the host under the same port numbers,
+and tide discovers the host's public address over STUN. Redis and the recorder
+are placed as in the media gate: Redis by name on a private network, the
+recorder in tide's network namespace.
+
+1. Create a **Docker Compose** service (not Stack: it can't build), with this
+   repository as its Git source and `./deploy/dokploy/compose.yaml` as the
+   compose path.
+2. In **Environment**, set the variables below. Dokploy writes them to `.env`
+   beside the compose file, which tide reads whole.
+3. In **Domains**, add the meeting host for service `tide`, container port
+   `8080`, with HTTPS. Dokploy attaches tide to `dokploy-network` and adds the
+   Traefik labels.
+4. Open 7882/udp and 7881/tcp in the server's firewall. Docker's published
+   ports bypass `ufw`, so a provider firewall is the one that counts.
+5. Deploy, and check the mode line in tide's log.
+
+```sh
+TIDE_BASE_URL=https://meet.example.com
+# Traefik's network: docker network inspect dokploy-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+TIDE_TRUSTED_PROXIES=10.0.1.0/24
+# openssl rand -base64 48
+TIDE_SESSION_SECRET=…
+TIDE_OIDC_ISSUER=https://id.example.com
+TIDE_OIDC_CLIENT_ID=tide
+TIDE_OIDC_CLIENT_SECRET=…
+# Recording, as in the compose above:
+COMPOSE_PROFILES=recording
+TIDE_S3_ENDPOINT=https://s3.example.com
+TIDE_S3_BUCKET=tide-recordings
+TIDE_S3_REGION=us-east-1
+TIDE_S3_ACCESS_KEY=…
+TIDE_S3_SECRET_KEY=…
+# openssl rand -hex 8
+TIDE_MEDIA_API_KEY=…
+# openssl rand -hex 32, for this and the password
+TIDE_MEDIA_API_SECRET=…
+TIDE_RECORDER_REDIS_PASSWORD=…
+```
+
+The compose file sets `TIDE_ADDR`, `TIDE_DB_PATH`, `TIDE_RECORDER_REDIS_ADDR`
+and `TIDE_RECORDER_TEMPLATE_URL` itself. Leave out the recording block for a
+deployment without recording, and the OIDC and session lines too for an
+anonymous one. tide's 8080 is not published, so trusting the whole
+`dokploy-network` subnet admits only the proxies and containers on it. Leave
+`TIDE_MEDIA_NODE_IP` unset unless the host's public address is not its own
+([The media address](#the-media-address)). The recorder joins tide's network
+namespace when it starts, so a tide container that restarts on its own leaves
+the recorder disconnected until it restarts too; redeploying restarts both.
+SQLite lives in the `tide-data` volume: back it up as in [Back up
+state](#back-up-state), not by copying the volume while tide runs.
 
 ## Kubernetes
 
