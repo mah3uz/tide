@@ -46,6 +46,8 @@ type Handler struct {
 	// onRoomDeleted is called after a room and its recordings are deleted,
 	// so that the transcripts reconciler can stop their jobs at once.
 	onRoomDeleted func()
+	// chatImages is what Public tells meetings of TIDE_CHAT_IMAGES.
+	chatImages bool
 }
 
 // AnonymousRoomCap is how many rooms an anonymous deployment keeps in
@@ -56,6 +58,11 @@ const AnonymousRoomCap = 10_000
 // SetMeetingEnder sets what ends the meeting in a room as it is deleted.
 func (h *Handler) SetMeetingEnder(ender MeetingEnder) {
 	h.ender = ender
+}
+
+// SetChatImages sets whether Public tells meetings chat may carry images.
+func (h *Handler) SetChatImages(on bool) {
+	h.chatImages = on
 }
 
 // SetRoomCap caps how many rooms may exist; 0 removes the cap.
@@ -198,7 +205,8 @@ func (h *Handler) Public(w http.ResponseWriter, r *http.Request) {
 	session, _ := auth.SessionFromContext(r.Context())
 	httpx.WriteJSON(w, http.StatusOK, api.PublicRoomInfo{
 		Slug: room.Slug, Name: room.Name, LobbyEnabled: room.LobbyEnabled,
-		CanManage: session.Sub != "" && httpx.CanManageRoom(session, room),
+		CanManage:  session.Sub != "" && httpx.CanManageRoom(session, room),
+		ChatImages: h.chatImages,
 	})
 }
 

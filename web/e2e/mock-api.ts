@@ -66,6 +66,8 @@ export interface ApiState {
   machines: MachinesResponse;
   /** Machines waiting to pair, by their code as the moil app shows it (XXXX-XXXX). */
   pairings: Record<string, PairingInfo>;
+  /** TIDE_CHAT_IMAGES, as rooms' public info tells every participant; default off. */
+  chatImages?: boolean;
 }
 
 export interface MockApi {
@@ -276,7 +278,8 @@ export async function mockApi(page: Page, state: ApiState = defaultState()): Pro
         slug: room.slug,
         name: room.name,
         lobby_enabled: room.lobby_enabled,
-        can_manage: manager
+        can_manage: manager,
+        chat_images: state.chatImages === true
       };
       return json(200, info);
     }

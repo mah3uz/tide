@@ -527,6 +527,7 @@ or equal to a value shipped in this repository refuses startup.
 | `TIDE_LOGIN_RATE_LIMIT`        | `10`                                   | Sign-in redirects per client per minute; when anonymous, new anonymous sessions.                                                                                                                                                                                  |
 | `TIDE_PAIR_RATE_LIMIT`         | `10`                                   | With transcripts, machines starting a moil pairing (`POST /moil/v1/pair`) per client per minute.                                                                                                                                                                  |
 | `TIDE_TRANSCRIPTS`             | `false`                                | Turns on transcripts and machine pairing ([Serve transcripts](#serve-transcripts)); needs recording. Read with `strconv.ParseBool`; anything else means off.                                                                                                      |
+| `TIDE_CHAT_IMAGES`             | `false`                                | Lets meeting chat carry images ([Chat images](#chat-images)). Any mode. Read with `strconv.ParseBool`; anything else means off.                                                                                                                                   |
 
 Rate limits count an IPv6 client by its /64 and an IPv4 client by its
 address; both come from `X-Forwarded-For` only through `TIDE_TRUSTED_PROXIES`.
@@ -537,6 +538,19 @@ pairing codes have fixed limits: a signed-in host may look up, confirm and
 deny 20 a minute, and a client address 60. `POST /moil/v1/pair` takes only
 `Content-Type: application/json`, which the moil app sends; a proxy or WAF in
 front of tide must pass it through.
+
+### Chat images
+
+With `TIDE_CHAT_IMAGES=true`, people in a meeting can send images (PNG, JPEG,
+WebP or GIF) in chat. The sender's browser re-encodes each one, which drops
+its metadata such as GPS position, to at most 2048 pixels on the long side and
+2 MB. Images go from browser to browser over the media server's data channel:
+the media server holds them in memory only while it forwards them, and tide
+never receives or stores them. They vanish when the meeting ends, like chat.
+
+Browsers enforce the switch; tide only tells them, on the room's public info.
+A modified client can still push bytes through the media server while it is
+off, but compliant browsers neither send images then nor show what arrives.
 
 ## Restarts end meetings
 

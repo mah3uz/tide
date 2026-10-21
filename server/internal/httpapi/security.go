@@ -6,7 +6,7 @@ import "net/http"
 // the bundled UI fonts are emitted as data URLs. Restrict scripts and fonts to
 // those two production sources while keeping all external script origins
 // blocked.
-const contentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+const contentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

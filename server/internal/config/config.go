@@ -69,6 +69,10 @@ type Config struct {
 	// (TIDE_TRANSCRIPTS, ARCHITECTURE.md §8.1). Off by default: moil is
 	// alpha, so an operator opts in. It needs Recording.
 	Transcripts bool
+	// ChatImages lets meeting chat carry images, peer to peer through the
+	// media server and never stored (TIDE_CHAT_IMAGES). Off by default.
+	// Browsers enforce it: the server only tells them.
+	ChatImages bool
 
 	// Anonymous is true when TIDE_OIDC_ISSUER is unset or empty: there is no
 	// sign-in, anyone may create a room and owns it through an anonymous
@@ -167,6 +171,7 @@ func Load() (Config, error) {
 		LoginRateLimit:    envPositiveInt("TIDE_LOGIN_RATE_LIMIT", DefaultLoginRateLimit),
 		PairRateLimit:     envPositiveInt("TIDE_PAIR_RATE_LIMIT", DefaultPairRateLimit),
 		Transcripts:       envBool("TIDE_TRANSCRIPTS", false),
+		ChatImages:        envBool("TIDE_CHAT_IMAGES", false),
 	}
 	var problems []string
 	trusted, err := parseTrustedProxies(env("TIDE_TRUSTED_PROXIES", ""))
@@ -304,6 +309,9 @@ func (c Config) Summary() string {
 	}
 	if c.Transcripts {
 		parts = append(parts, "transcripts on")
+	}
+	if c.ChatImages {
+		parts = append(parts, "chat images on")
 	}
 	return strings.Join(parts, ", ")
 }

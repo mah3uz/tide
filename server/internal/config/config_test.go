@@ -21,7 +21,7 @@ func clearTideEnv(t *testing.T) {
 		"TIDE_RECORDER_REDIS_ADDR", "TIDE_RECORDER_REDIS_PASSWORD",
 		"TIDE_TRUSTED_PROXIES", "TIDE_DEV_MODE", "TIDE_JOIN_RATE_LIMIT",
 		"TIDE_WAIT_RATE_LIMIT", "TIDE_LOGIN_RATE_LIMIT", "TIDE_PAIR_RATE_LIMIT",
-		"TIDE_TRANSCRIPTS",
+		"TIDE_TRANSCRIPTS", "TIDE_CHAT_IMAGES",
 	} {
 		// t.Setenv registers restoration of the original value; the explicit
 		// Unsetenv afterwards gives LookupEnv-miss semantics during the test.
@@ -537,5 +537,34 @@ func TestLoadTranscriptsSwitch(t *testing.T) {
 				t.Fatalf("Transcripts = %v, want %v", cfg.Transcripts, test.want)
 			}
 		})
+	}
+}
+
+// Chat images are off unless the operator turns them on, in either mode
+// (nothing is stored, so they need neither sign-in nor storage), and a value
+// strconv.ParseBool can't read means off, as with TIDE_TRANSCRIPTS.
+func TestLoadChatImagesSwitch(t *testing.T) {
+	for _, test := range []struct {
+		value string // "" leaves it unset
+		want  bool
+	}{
+		{"", false}, {"true", true}, {"1", true}, {"TRUE", true},
+		{"false", false}, {"0", false}, {"yes", false}, {"on", false},
+	} {
+		for mode, base := range map[string]map[string]string{"anonymous": nil, "signed-in": signedIn} {
+			t.Run(mode+"/TIDE_CHAT_IMAGES="+test.value, func(t *testing.T) {
+				env := merge(base)
+				if test.value != "" {
+					env["TIDE_CHAT_IMAGES"] = test.value
+				}
+				cfg := load(t, env)
+				if cfg.ChatImages != test.want {
+					t.Fatalf("ChatImages = %v, want %v", cfg.ChatImages, test.want)
+				}
+				if on := strings.HasSuffix(cfg.Summary(), ", chat images on"); on != test.want {
+					t.Fatalf("Summary = %q with ChatImages %v", cfg.Summary(), cfg.ChatImages)
+				}
+			})
+		}
 	}
 }
