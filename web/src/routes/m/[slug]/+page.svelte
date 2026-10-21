@@ -111,6 +111,7 @@
     }
 
     canManage = details.can_manage;
+    rtc.images.enabled = details.chat_images;
     try {
       currentUser = await me();
       // An anonymous owner has no name either, and types one like a guest.

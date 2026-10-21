@@ -100,6 +100,14 @@ export interface PublicRoomInfo {
    * global administrator. The capability is enforced server-side on every route.
    */
   can_manage: boolean;
+  /**
+   * ChatImages is true when this deployment lets meeting chat carry images
+   * (TIDE_CHAT_IMAGES). It is here rather than on Me because guests, who
+   * have no session on a signed-in deployment, read this and not /api/me.
+   * Browsers enforce it: images travel peer to peer through the media
+   * server, so tide never sees them.
+   */
+  chat_images: boolean;
 }
 /**
  * CreateRoomRequest: both fields are optional (ARCHITECTURE.md §5). A blank

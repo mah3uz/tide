@@ -19,6 +19,8 @@ import {
   playRecordingStartedSound
 } from '#lib/sounds.js';
 import { setConnectionChrome } from './connection.svelte';
+import { ChatImages } from '#lib/chat/chatImages.svelte.js';
+import type { ChatImage } from '#lib/chat/images.js';
 import { projectParticipants, type MediaSubscriptionFailure, type ParticipantView } from './media';
 import {
   DeviceSwitchError,
@@ -63,9 +65,11 @@ export interface PreJoinOptions extends JoinMediaOptions {
 
 export interface ChatMessage {
   from: string;
+  /** Empty for an image message. */
   text: string;
   ts: number;
   mine: boolean;
+  image?: ChatImage;
 }
 
 // The payload deliberately carries no sender name: attribution comes only
@@ -191,6 +195,7 @@ export class RoomState {
   activeSpeakerIdentities = $state<string[]>([]);
   chat = $state<ChatMessage[]>([]);
   chatRevision = $state(0);
+  readonly images = new ChatImages(this.room, (message) => this.appendChat(message));
   disconnectReason = $state<DisconnectReason>();
   wasRemoved = $state(false);
   canPlaybackAudio = $state(true);
@@ -385,6 +390,7 @@ export class RoomState {
     // This RoomState outlives a session (the page reuses it to rejoin), so
     // every device result is tagged with the session that asked for it.
     const epoch = ++this.connectionEpoch;
+    this.images.start();
     this.chat = [];
     this.chatRevision = 0;
     this.hasSyncedRoomMetadata = false;
@@ -1014,6 +1020,7 @@ export class RoomState {
   }
 
   private handleDisconnected(reason?: DisconnectReason): void {
+    this.images.stop();
     this.disconnectReason = reason;
     this.wasRemoved = reason === DisconnectReason.PARTICIPANT_REMOVED;
     this.connectionState = ConnectionState.Disconnected;
@@ -1596,7 +1603,9 @@ export class RoomState {
   }
 
   private appendChat(message: ChatMessage): void {
-    this.chat = [...this.chat, message].slice(-maximumChatMessages);
+    const chat = [...this.chat, message];
+    for (const dropped of chat.slice(0, -maximumChatMessages)) this.images.release(dropped);
+    this.chat = chat.slice(-maximumChatMessages);
     this.chatRevision += 1;
     if (!message.mine) playNewMessageSound();
   }

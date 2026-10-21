@@ -157,6 +157,7 @@ func New(cfg config.Config, web fs.FS, roomStore *store.Store, transcribe *moil.
 	meetings := rooms.NewLiveKitMeetingEnder(cfg)
 	roomsHandler := rooms.NewHandler(roomStore, roomObjects, liveRooms, registry)
 	roomsHandler.SetMeetingEnder(meetings)
+	roomsHandler.SetChatImages(cfg.ChatImages)
 	if cfg.Anonymous {
 		roomsHandler.SetRoomCap(anonymousRoomCap)
 	}

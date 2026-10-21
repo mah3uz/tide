@@ -27,6 +27,8 @@ export const fakeSfuLaunchArgs = ['--disable-features=WebRtcHideLocalIpsWithMdns
 export interface FakeSfu {
   /** Pushes room metadata the way the server does, e.g. `{"recording":true}`. */
   setRoomMetadata(metadata: string): void;
+  /** Says someone else joined, publishing nothing: enough to be named in chat. */
+  addParticipant(identity: string, name: string): void;
 }
 
 /** A response as its constructor takes it: nested messages may be partial. */
@@ -201,6 +203,24 @@ export async function fakeSfu(page: Page, { metadata = '' } = {}): Promise<FakeS
         send(ws, {
           case: 'roomUpdate',
           value: { room: { sid: 'RM_fake', name: 'fake', metadata } }
+        });
+      }
+    },
+    addParticipant(identity, name) {
+      for (const ws of sockets) {
+        send(ws, {
+          case: 'update',
+          value: {
+            participants: [
+              {
+                sid: `PA_${identity}`,
+                identity,
+                name,
+                state: 2, // ACTIVE
+                permission: { canSubscribe: true, canPublish: true, canPublishData: true }
+              }
+            ]
+          }
         });
       }
     }
