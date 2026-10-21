@@ -139,7 +139,10 @@
     const revision = rtc.chatRevision;
     if (revision > seenChatRevision && !chatOpen) {
       const added = Math.min(revision - seenChatRevision, rtc.chat.length);
-      const fresh = rtc.chat.slice(-added).filter((message) => !message.mine);
+      // A "weren't shown" notice is appended quietly, without a revision, so it
+      // must not take the place of a counted message in this slice.
+      const counted = rtc.chat.filter((message) => message.image?.kind !== 'withheld');
+      const fresh = counted.slice(-added).filter((message) => !message.mine);
       unreadChat += fresh.length;
       const newest = fresh.at(-1);
       if (newest) showPeek(newest);

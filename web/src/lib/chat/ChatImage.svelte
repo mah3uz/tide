@@ -121,10 +121,9 @@
     height: 32px;
     place-items: center;
     color: var(--ink);
-    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
     border-radius: var(--r-pill);
     box-shadow: 0 0 0 1px var(--line-strong);
-    backdrop-filter: blur(8px);
     transition: background-color var(--dur-1) var(--ease-out);
   }
 
