@@ -77,6 +77,8 @@ interface ChatPayload {
 }
 
 const maximumChatMessages = 200;
+/** Longer messages are refused on send and dropped on receive. */
+export const maximumChatLength = 2000;
 const participantExitSoundDelay = 100;
 const maximumLedgerEntries = 500;
 const maximumHandlerFaults = 50;
@@ -714,6 +716,9 @@ export class RoomState {
   async sendChat(text: string): Promise<void> {
     const message = text.trim();
     if (!message) return;
+    if (message.length > maximumChatLength) {
+      throw new Error(`Messages can be at most ${maximumChatLength} characters.`);
+    }
     const payload: ChatPayload = {
       text: message,
       ts: Date.now()
@@ -1574,7 +1579,8 @@ export class RoomState {
       if (
         typeof decoded.text !== 'string' ||
         typeof decoded.ts !== 'number' ||
-        decoded.text.trim() === ''
+        decoded.text.trim() === '' ||
+        decoded.text.length > maximumChatLength
       ) {
         return;
       }
