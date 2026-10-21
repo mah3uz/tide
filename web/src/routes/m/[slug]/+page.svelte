@@ -23,6 +23,9 @@
   import { SignIn, SignOut } from 'phosphor-svelte';
   import { ConnectionState, DisconnectReason } from 'livekit-client';
   import PreJoin from '#lib/rtc/PreJoin.svelte';
+  import Button from '#lib/ui/Button.svelte';
+  import ThemeToggle from '#lib/ui/ThemeToggle.svelte';
+  import Wordmark from '#lib/ui/Wordmark.svelte';
   import RoomStage from '#lib/rtc/RoomStage.svelte';
   import { setConnectionChrome } from '#lib/rtc/connection.svelte.js';
   import { RoomState, type PreJoinOptions } from '#lib/rtc/room.svelte.js';
@@ -63,6 +66,7 @@
   let closeWait: (() => void) | undefined;
   let closeHostLobby: (() => void) | undefined;
   const announcedLobbyRequestIDs = new Set<string>();
+  let pageHidden = $state(false);
 
   $effect(() => {
     if (meetingState !== 'connected') return;
@@ -262,7 +266,13 @@
     meetingState = 'prejoin';
   }
 
-  onMount(() => void loadMeeting());
+  onMount(() => {
+    void loadMeeting();
+    const syncHidden = () => (pageHidden = document.hidden);
+    syncHidden();
+    document.addEventListener('visibilitychange', syncHidden);
+    return () => document.removeEventListener('visibilitychange', syncHidden);
+  });
   onDestroy(() => {
     closeWait?.();
     closeHostLobby?.();
@@ -332,132 +342,166 @@
     onjoin={join}
     {account}
   />
-{:else if meetingState === 'loading'}
-  <main class="meeting-state" aria-live="polite"><p>Loading room…</p></main>
-{:else if meetingState === 'missing'}
+{:else}
   <main class="meeting-state">
-    <p class="state-message">This room does not exist.</p>
-    <a class="state-action" href="/">Go to dashboard</a>
-  </main>
-{:else if meetingState === 'load-error'}
-  <main class="meeting-state">
-    <p class="state-message" role="alert">{error}</p>
-    <button class="state-action" type="button" onclick={() => void loadMeeting()}>
-      Try again
-    </button>
-  </main>
-{:else if meetingState === 'joining'}
-  <main class="meeting-state" aria-live="polite">
-    <span class="room-name">{details?.name ?? 'Room'}</span>
-    <p>Joining…</p>
-  </main>
-{:else if meetingState === 'waiting'}
-  <main class="meeting-state" aria-live="polite">
-    <span class="waiting-dot" aria-hidden="true"></span>
-    <h1>Waiting for the host to let you in.</h1>
-    <span class="room-name">{details?.name ?? 'Room'}</span>
-  </main>
-{:else if meetingState === 'denied'}
-  <main class="meeting-state">
-    <p class="state-message">The host did not let you in.</p>
-    <a class="state-action" href="/">Go to dashboard</a>
-  </main>
-{:else if meetingState === 'expired'}
-  <main class="meeting-state">
-    <p class="state-message">Your lobby request expired.</p>
-    <button class="state-action" type="button" onclick={rejoin}>Try again</button>
-  </main>
-{:else if meetingState === 'left'}
-  <main class="meeting-state">
-    <p class="state-message">You left the meeting.</p>
-    <button class="state-action" type="button" onclick={rejoin}>Rejoin</button>
-  </main>
-{:else if meetingState === 'ended'}
-  <main class="meeting-state">
-    <p class="state-message">The meeting ended.</p>
-    <a class="state-action" href="/">Go to dashboard</a>
-  </main>
-{:else if meetingState === 'removed'}
-  <main class="meeting-state">
-    <p class="state-message">You were removed from the meeting.</p>
-    <button class="state-action" type="button" onclick={rejoin}>Request to rejoin</button>
-  </main>
-{:else if meetingState === 'disconnected'}
-  <main class="meeting-state">
-    <p class="state-message">
-      {rtc.disconnectReason === DisconnectReason.DUPLICATE_IDENTITY
-        ? 'This meeting was opened from another tab or device.'
-        : 'The connection to the meeting was lost.'}
-    </p>
-    <button class="state-action" type="button" onclick={rejoin}>Rejoin</button>
+    <header class="topbar">
+      <Wordmark size={18} />
+      <ThemeToggle />
+    </header>
+    <div class="orbits" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="state-body" aria-live="polite">
+      {#if meetingState === 'loading'}
+        <p class="state-note">Loading room…</p>
+      {:else if meetingState === 'missing'}
+        <p class="state-message">This room does not exist.</p>
+        <Button variant="accent" href="/">Go to dashboard</Button>
+      {:else if meetingState === 'load-error'}
+        <p class="state-message" role="alert">{error}</p>
+        <Button variant="accent" onclick={() => void loadMeeting()}>Try again</Button>
+      {:else if meetingState === 'joining'}
+        <span class="room-name">{details?.name ?? 'Room'}</span>
+        <p class="state-note">Joining…</p>
+      {:else if meetingState === 'waiting'}
+        <span class="waiting-orb" class:paused={pageHidden} aria-hidden="true"></span>
+        <h1 class="state-message">Waiting for the host to let you in.</h1>
+        <span class="room-name">{details?.name ?? 'Room'}</span>
+      {:else if meetingState === 'denied'}
+        <p class="state-message">The host did not let you in.</p>
+        <Button variant="accent" href="/">Go to dashboard</Button>
+      {:else if meetingState === 'expired'}
+        <p class="state-message">Your lobby request expired.</p>
+        <Button variant="accent" onclick={rejoin}>Try again</Button>
+      {:else if meetingState === 'left'}
+        <p class="state-message">You left the meeting.</p>
+        <Button variant="accent" onclick={rejoin}>Rejoin</Button>
+      {:else if meetingState === 'ended'}
+        <p class="state-message">The meeting ended.</p>
+        <Button variant="accent" href="/">Go to dashboard</Button>
+      {:else if meetingState === 'removed'}
+        <p class="state-message">You were removed from the meeting.</p>
+        <Button variant="accent" onclick={rejoin}>Request to rejoin</Button>
+      {:else if meetingState === 'disconnected'}
+        <p class="state-message">
+          {rtc.disconnectReason === DisconnectReason.DUPLICATE_IDENTITY
+            ? 'This meeting was opened from another tab or device.'
+            : 'The connection to the meeting was lost.'}
+        </p>
+        <Button variant="accent" onclick={rejoin}>Rejoin</Button>
+      {/if}
+    </div>
   </main>
 {/if}
 
 <style>
   .meeting-state {
-    display: grid;
+    position: relative;
+    display: flex;
     min-height: 100dvh;
-    padding: 24px 12px;
-    align-content: center;
-    justify-items: center;
-    gap: 8px;
-    color: var(--ink-2);
-    text-align: center;
-    background: var(--paper);
+    flex-direction: column;
+    padding: 0 32px calc(32px + env(safe-area-inset-bottom));
+    overflow: hidden;
   }
 
-  .meeting-state p {
-    margin: 0;
+  .topbar {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    min-height: 84px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .orbits span {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
+    border-radius: 50%;
+    pointer-events: none;
+    translate: -50% -50%;
+  }
+
+  .orbits span:nth-child(1) {
+    width: 1300px;
+    height: 640px;
+    border: 1px dashed var(--line);
+  }
+
+  .orbits span:nth-child(2) {
+    width: 900px;
+    height: 440px;
+    border-color: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  .orbits span:nth-child(3) {
+    width: 520px;
+    height: 250px;
+  }
+
+  .state-body {
+    position: relative;
+    display: flex;
+    margin: auto;
+    padding-bottom: 84px;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    text-align: center;
   }
 
   .state-message {
-    max-width: 380px;
+    max-width: 560px;
+    margin: 0;
     color: var(--ink);
-    font-size: 13px;
-    line-height: 20px;
-    font-weight: 550;
+    font-size: 32px;
+    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
   }
 
-  .meeting-state > p:not(.state-message) {
-    max-width: 380px;
-    font-size: 12px;
+  .state-note {
+    margin: 0;
+    color: var(--ink-3);
+    font-family: var(--font-mono);
+    font-size: 13px;
   }
 
   .room-name {
-    padding: 2px 7px;
+    max-width: min(560px, 100%);
+    padding: 6px 14px;
+    overflow: hidden;
     color: var(--ink-2);
-    font-size: 11px;
-    line-height: 18px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
   }
 
-  .waiting-dot {
-    width: 8px;
-    height: 8px;
-    margin-bottom: 4px;
-    background: var(--warn);
-    border-radius: 999px;
-  }
-
-  .meeting-state button,
-  .state-action {
-    display: inline-flex;
-    height: var(--control-height);
-    align-items: center;
-    padding: 3px 8px;
-    color: white;
-    font-weight: 550;
-    text-decoration: none;
+  /* Loops only while the wait is live, and pauses while the tab is hidden. */
+  .waiting-orb {
+    width: 16px;
+    height: 16px;
+    margin-bottom: 12px;
     background: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: var(--radius-control);
+    border-radius: var(--r-pill);
+    box-shadow:
+      0 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent),
+      0 0 0 22px color-mix(in srgb, var(--accent) 6%, transparent);
+    animation: waiting-pulse 2.4s var(--ease-in-out) infinite;
   }
 
-  .meeting-state button:hover,
-  .state-action:hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
+  .waiting-orb.paused {
+    animation-play-state: paused;
+  }
+
+  @keyframes waiting-pulse {
+    50% {
+      opacity: 0.55;
+      transform: scale(0.82);
+    }
   }
 
   .account {
@@ -465,36 +509,36 @@
     min-width: 0;
     align-items: center;
     gap: 6px;
-    color: var(--ink-2);
-    font-size: 12px;
+    color: var(--ink-3);
+    font-size: 13px;
   }
 
   .account-name {
     overflow: hidden;
     color: var(--ink);
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .account-role {
     flex-shrink: 0;
-    color: var(--ink-2);
   }
 
   .account-action {
     display: grid;
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
-    width: var(--control-height);
-    height: var(--control-height);
     padding: 0;
     place-items: center;
     color: var(--ink-2);
     background: transparent;
     border: 1px solid transparent;
-    border-radius: var(--radius-control);
+    border-radius: var(--r-pill);
     transition:
-      color var(--motion-fast),
-      background var(--motion-fast);
+      color var(--dur-1) var(--ease-out),
+      background-color var(--dur-1) var(--ease-out);
   }
 
   .account-action:hover {
@@ -504,15 +548,38 @@
 
   .account-link {
     display: inline-flex;
+    height: 36px;
     align-items: center;
-    gap: 4px;
-    color: var(--accent);
-    font-size: 12px;
-    font-weight: 550;
+    gap: 6px;
+    padding: 0 14px;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
     text-decoration: none;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    transition: background-color var(--dur-1) var(--ease-out);
   }
 
   .account-link:hover {
-    color: var(--accent-hover);
+    background: var(--surface-2);
+  }
+
+  @media (max-width: 639px) {
+    .meeting-state {
+      padding: 0 16px calc(20px + env(safe-area-inset-bottom));
+    }
+
+    .topbar {
+      min-height: 64px;
+    }
+
+    .state-body {
+      padding-bottom: 64px;
+    }
+
+    .state-message {
+      font-size: 26px;
+    }
   }
 </style>
