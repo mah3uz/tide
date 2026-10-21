@@ -649,6 +649,15 @@ test('on a phone the stage behind a sheet is out of reach until it closes', asyn
   await expect(sheet).toBeHidden();
   await expect(more).toBeFocused();
   expect(await inert('.media-layout')).toBe(false);
+
+  // A phone has no Escape key: the sheet needs a close button, and a tap on
+  // the dimmed stage above it closes it too.
+  await more.click();
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toBeHidden();
+  await more.click();
+  await page.locator('.scrim').click({ position: { x: 20, y: 20 } });
+  await expect(sheet).toBeHidden();
 });
 
 test('a tile left off the stage keeps no video or level meter', async ({ page }) => {

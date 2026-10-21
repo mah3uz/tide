@@ -196,6 +196,16 @@ body {
   }
 }
 
+/* iOS Safari zooms the page into any focused field under 16px. Important so
+   it beats scoped component styles and text utilities. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 button {
   cursor: pointer;
 }

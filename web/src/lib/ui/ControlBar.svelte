@@ -492,7 +492,10 @@
 </nav>
 
 {#if phone.current && moreOpen}
-  <div class="scrim" aria-hidden="true"></div>
+  <!-- iOS Safari never bubbles a tap on a plain div up to the window, so the
+       scrim closes the sheet itself. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div class="scrim" aria-hidden="true" onclick={closeAll}></div>
   <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div
     class="more-sheet"
@@ -503,6 +506,12 @@
     onclick={(event) => event.stopPropagation()}
   >
     <span class="handle" aria-hidden="true"></span>
+    <header class="sheet-header">
+      <h2>More controls</h2>
+      <button type="button" class="sheet-close" aria-label="Close" title="Close" onclick={closeAll}>
+        <X size={16} weight="regular" aria-hidden="true" />
+      </button>
+    </header>
     <div class="sheet-actions">
       {#if canShareScreen}{@render shareButton(true)}{/if}
       {#if canRecord}{@render recordGroup(true)}{/if}
@@ -1010,6 +1019,32 @@
       border-radius: var(--r-pill);
     }
 
+    .sheet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .sheet-header h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 600;
+    }
+
+    .sheet-close {
+      display: grid;
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      place-items: center;
+      color: var(--ink-2);
+      background: transparent;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-pill);
+    }
+
     .sheet-actions {
       display: grid;
       gap: 8px;
@@ -1018,12 +1053,12 @@
     .round.labelled {
       display: flex;
       width: 100%;
-      height: 48px;
+      height: 52px;
       padding: 0 16px;
       justify-content: flex-start;
       gap: 12px;
       color: var(--ink);
-      font-size: 14px;
+      font-size: 16px;
       background: var(--surface-2);
       border-radius: var(--r-md);
     }
@@ -1046,7 +1081,7 @@
     .sheet-devices h3 {
       margin: 0;
       color: var(--ink-3);
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 500;
     }
 
@@ -1057,6 +1092,12 @@
       background: var(--surface-2);
       box-shadow: none;
       animation: none;
+    }
+
+    .device-menu.inline .device-option {
+      min-height: 48px;
+      padding: 8px 12px;
+      font-size: 16px;
     }
 
     .bar-notice.raised {
