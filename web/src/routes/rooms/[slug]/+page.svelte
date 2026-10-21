@@ -587,7 +587,11 @@
             No recordings yet. They'll appear here after a meeting is recorded.
           </p>
         {:else}
-          <div class="mt-4 overflow-hidden rounded-lg border border-line bg-surface">
+          <!-- One grid for the whole list, each row a subgrid of it, so a row with
+               an extra pill or one fewer action keeps its columns in line. -->
+          <div
+            class="mt-4 grid {rowGrid} gap-x-4 overflow-hidden rounded-lg border border-line bg-surface max-sm:gap-x-3"
+          >
             {#each recordings as recording (recording.id)}
               {@const when = dateTimeLabel(recording.started_at)}
               {@const note = transcriptNote(recording.transcript)}
@@ -596,7 +600,7 @@
                  the actions move to the last column, and reading-flow keeps
                  Tab order visual where browsers support it. -->
               <div
-                class="grid {rowGrid} items-center gap-x-4 gap-y-2 border-b border-line px-5 py-3.5 [reading-flow:grid-rows] last:border-b-0 max-sm:gap-x-3 max-sm:px-4"
+                class="col-span-full grid grid-cols-subgrid items-center gap-y-2 border-b border-line px-5 py-3.5 [reading-flow:grid-rows] last:border-b-0 max-sm:px-4"
                 data-recording-id={recording.id}
               >
                 <span class="flex w-max items-center gap-1">

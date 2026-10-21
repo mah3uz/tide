@@ -2,6 +2,9 @@
   import { onMount, type Snippet } from 'svelte';
   import { page } from '$app/state';
   import { connectionChrome } from '#lib/rtc/connection.svelte.js';
+  // Chrome offers install once, possibly while another page is open: the
+  // store has to be listening from the first page, not from the dashboard's.
+  import '#lib/pwa/install.svelte.js';
   import { registerServiceWorker } from '#lib/pwa/register.js';
   import Hairline from '#lib/ui/Hairline.svelte';
   import { theme } from '#lib/ui/theme.svelte.js';
