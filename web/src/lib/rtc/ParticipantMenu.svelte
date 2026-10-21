@@ -4,6 +4,8 @@
 
   let {
     participant,
+    compact = false,
+    side = 'left',
     open = false,
     videoHidden = false,
     canManage = false,
@@ -13,6 +15,10 @@
     onremove = () => undefined
   }: {
     participant: ParticipantView;
+    /** A portal's small trigger; its menu opens upward. */
+    compact?: boolean;
+    /** Which way the menu reaches from its trigger, to stay on the stage. */
+    side?: 'left' | 'right';
     open?: boolean;
     videoHidden?: boolean;
     canManage?: boolean;
@@ -80,7 +86,7 @@
 
 <!-- The propagation shield keeps this menu open while its own controls run. -->
 <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
-<div class="participant-actions" onclick={(event) => event.stopPropagation()}>
+<div class="participant-actions" class:compact onclick={(event) => event.stopPropagation()}>
   <button
     bind:this={trigger}
     class="menu-trigger"
@@ -92,11 +98,16 @@
     title={`Actions for ${participant.name}`}
     onclick={toggleMenu}
   >
-    <DotsThreeVertical size={16} weight="bold" aria-hidden="true" />
+    <DotsThreeVertical size={compact ? 14 : 16} weight="bold" aria-hidden="true" />
   </button>
 
   {#if open}
-    <div class="participant-menu" role="menu" aria-label={`${participant.name} actions`}>
+    <div
+      class="participant-menu"
+      class:reach-right={side === 'right'}
+      role="menu"
+      aria-label={`${participant.name} actions`}
+    >
       <button
         type="button"
         role="menuitem"
@@ -150,26 +161,19 @@
   .participant-actions {
     position: absolute;
     z-index: 4;
-    top: 6px;
-    right: 6px;
+    top: 16px;
+    right: 16px;
+  }
+
+  .participant-actions.compact {
+    top: 0;
+    right: 0;
   }
 
   button {
-    color: var(--text-2);
-    background: color-mix(in srgb, var(--stage) 82%, transparent);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-control);
-  }
-
-  button:hover:not(:disabled),
-  button:focus-visible,
-  button.active {
-    color: var(--text);
-    background: var(--panel);
-  }
-
-  button:focus-visible {
-    outline-color: var(--accent-d);
+    color: var(--ink);
+    background: transparent;
+    border: 0;
   }
 
   button:disabled {
@@ -179,79 +183,132 @@
 
   .menu-trigger {
     display: grid;
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     padding: 0;
     place-items: center;
-    opacity: 0.78;
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    border-radius: 50%;
     transition:
-      color var(--motion-fast),
-      background var(--motion-fast),
-      opacity var(--motion-fast);
+      background-color var(--dur-1) var(--ease-out),
+      opacity var(--dur-1) var(--ease-out);
   }
 
   .menu-trigger:hover,
-  .menu-trigger:focus-visible,
   .menu-trigger.active {
-    opacity: 1;
+    background: var(--surface);
+  }
+
+  .compact .menu-trigger {
+    width: 26px;
+    height: 26px;
+    background: var(--surface);
+    box-shadow: var(--shadow-float);
+  }
+
+  /* On a portal the trigger shows on hover or focus; a touch screen, with no
+     hover, always shows it. */
+  @media (hover: hover) {
+    .compact .menu-trigger:not(.active, :focus-visible) {
+      opacity: 0;
+    }
+
+    :global(.tile:hover) .compact .menu-trigger {
+      opacity: 1;
+    }
   }
 
   .participant-menu {
     position: absolute;
-    top: 32px;
+    top: calc(100% + 6px);
     right: 0;
     display: grid;
-    width: 160px;
-    padding: 4px;
+    width: 184px;
+    padding: 6px;
     gap: 2px;
-    color: var(--text);
-    background: var(--panel);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-card);
+    color: var(--ink);
+    background: var(--surface);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-float);
+    animation: menu-down var(--dur-2) var(--ease-out);
+  }
+
+  .participant-menu.reach-right {
+    right: auto;
+    left: 0;
+  }
+
+  .compact .participant-menu {
+    top: auto;
+    bottom: calc(100% + 6px);
+    animation-name: menu-up;
   }
 
   .participant-menu button {
     display: flex;
     width: 100%;
-    min-height: 28px;
-    padding: 4px 7px;
+    min-height: 34px;
+    padding: 6px 10px;
     align-items: center;
-    gap: 7px;
-    color: var(--text-2);
-    font-size: 12px;
+    gap: 10px;
+    color: var(--ink);
+    font-size: 13px;
     text-align: left;
-    background: transparent;
-    border-color: transparent;
+    border-radius: var(--r-sm);
+    transition: background-color var(--dur-1) var(--ease-out);
   }
 
   .participant-menu button:hover:not(:disabled),
   .participant-menu button:focus-visible {
-    color: var(--text);
-    background: var(--panel-2);
+    background: var(--surface-2);
   }
 
-  .participant-menu button.danger:hover:not(:disabled),
-  .participant-menu button.danger:focus-visible,
+  .participant-menu button.danger,
   .participant-menu button.confirm {
-    color: var(--rec);
+    color: var(--rec-ink);
+  }
+
+  .participant-menu button.confirm {
+    background: var(--rec-soft);
   }
 
   .separator {
     height: 1px;
-    margin: 2px 3px;
-    background: var(--border-d);
+    margin: 3px 6px;
+    background: var(--line);
   }
 
   .error {
-    margin: 3px 5px 2px;
-    color: var(--rec);
-    font-size: 11px;
-    line-height: 15px;
+    margin: 4px 8px 2px;
+    color: var(--rec-ink);
+    font-size: 12px;
+    line-height: 16px;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .menu-trigger {
-      transition: none;
+  @keyframes menu-down {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  @keyframes menu-up {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  /* A phone's portals scroll in a strip that would clip the menu, so it
+     opens as a bar above the strip instead. */
+  @media (max-width: 639.98px) {
+    .compact .participant-menu {
+      position: fixed;
+      z-index: 30;
+      right: 16px;
+      bottom: calc(var(--dock-h, 92px) + 104px);
+      left: 16px;
+      width: auto;
     }
   }
 </style>

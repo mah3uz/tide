@@ -40,24 +40,35 @@
 </div>
 
 <style>
+  /* Bars run the brand mark's gradient, left to right; no box of its own, so
+     it sits inside whatever chip carries the name. */
   .waveform {
     display: flex;
     flex: none;
-    gap: 2px;
+    gap: 3px;
     align-items: center;
-    padding: 5px;
-    background: color-mix(in srgb, var(--stage) 78%, transparent);
-    border: 1px solid var(--border-d);
-    border-radius: var(--radius-control);
+    height: 18px;
   }
 
   .waveform span {
-    width: 2px;
-    height: 10px;
-    background: var(--text-2);
-    border-radius: 999px;
+    width: 3px;
+    height: 16px;
+    background: var(--mark-from);
+    border-radius: 2px;
     transform: scaleY(0.18);
     transform-origin: center;
     will-change: transform;
+  }
+
+  .waveform span:nth-child(2) {
+    background: color-mix(in srgb, var(--mark-from), var(--mark-to) 33%);
+  }
+
+  .waveform span:nth-child(3) {
+    background: color-mix(in srgb, var(--mark-from), var(--mark-to) 66%);
+  }
+
+  .waveform span:nth-child(4) {
+    background: var(--mark-to);
   }
 </style>
