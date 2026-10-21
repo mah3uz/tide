@@ -47,8 +47,8 @@ test('media ownership converges across the deterministic lifecycle corpus', asyn
     );
 
     // Active-speaker storms and view changes only change CSS placement. A
-    // call of two opens in speaker view.
-    await expect(page.getByTestId('speaker-pane')).toBeVisible();
+    // call of two opens in the Orbit view, the other person in the lens.
+    await expect(page.locator('[data-testid="participant-tile"][data-shape="lens"]')).toBeVisible();
     await page.evaluate(async () => {
       const room = (
         window as Window &

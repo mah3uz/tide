@@ -370,7 +370,6 @@
       class:strip={layout.strip}
       aria-label="Participant cameras"
       data-count={rtc.participants.length}
-      data-testid={layoutMode === 'orbit' ? 'speaker-pane' : undefined}
     >
       {#each rtc.participants as participant (participant.identity)}
         {@const slot = layout.slots[participant.identity] ?? { shape: 'hidden' }}
