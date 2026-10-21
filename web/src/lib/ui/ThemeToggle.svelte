@@ -7,7 +7,7 @@
 
 <button
   type="button"
-  class="inline-grid size-9 shrink-0 place-items-center rounded-pill border border-line bg-transparent p-0 text-ink-2 transition-colors duration-(--dur-1) ease-out hover:bg-surface-2 hover:text-ink"
+  class="inline-grid size-9 shrink-0 place-items-center rounded-pill border border-line bg-transparent p-0 text-ink-2 transition-colors duration-(--dur-1) ease-out hover:bg-surface-2 hover:text-ink pointer-coarse:size-11"
   aria-label={`Switch to ${next} theme`}
   onclick={() => theme.set(next)}
 >

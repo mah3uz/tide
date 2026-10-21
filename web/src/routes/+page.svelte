@@ -12,6 +12,7 @@
   import { AuthLoginPath, type Me, type RoomInfo } from '#lib/api/types.gen.js';
   import AddToCalendarDialog from '#lib/ui/AddToCalendarDialog.svelte';
   import BrandMark from '#lib/ui/BrandMark.svelte';
+  import InstallButton from '#lib/ui/InstallButton.svelte';
   import Button from '#lib/ui/Button.svelte';
   import NewRoomDialog from '#lib/ui/NewRoomDialog.svelte';
   import { participantColor } from '#lib/ui/participantColor.js';
@@ -155,7 +156,7 @@
     <ellipse class="ring-3" rx="260" ry="125" />
     <circle class="planet-1" cx="437" cy="-113" r="7" />
     <circle class="planet-2" cx="-635" cy="65" r="5" />
-    <circle class="planet-3" cx="-176" cy="122" r="4" />
+    <circle class="planet-3" cx="-200" cy="-80" r="4" />
   </svg>
 {/snippet}
 
@@ -164,7 +165,7 @@
 {:else if dashboardState === 'signed-out' || dashboardState === 'error'}
   <main class="welcome">
     {@render orbits()}
-    <div class="corner"><ThemeToggle /></div>
+    <div class="corner"><InstallButton /><ThemeToggle /></div>
     <section class="hero">
       <span class="hero-mark"><BrandMark size={64} /></span>
       <h1 class="hero-title">tide</h1>
@@ -190,6 +191,7 @@
             <Desktop size={18} weight="regular" aria-hidden="true" />
           </a>
         {/if}
+        <InstallButton />
         <ThemeToggle />
         <!-- Without sign-in there is no account, and signing out would only
              orphan the rooms this browser created (ARCHITECTURE.md §4.1). -->
@@ -349,13 +351,18 @@
 
   .corner {
     position: absolute;
+    display: flex;
+    gap: 8px;
     top: max(20px, env(safe-area-inset-top));
     right: max(20px, env(safe-area-inset-right));
   }
 
+  /* A fixed 48px above the hero's centre (which sits 12px below the middle,
+     from the padding), never a share of the height: a tall screen would
+     otherwise slide the planets onto the words. */
   .orbits {
     position: absolute;
-    top: 46%;
+    top: calc(50% - 36px);
     left: 50%;
     width: 1400px;
     height: 680px;
@@ -809,6 +816,18 @@
 
     .fab {
       display: grid;
+    }
+  }
+
+  /* A fingertip's target, the size the theme and install buttons take too. */
+  @media (pointer: coarse) {
+    .account .round {
+      width: 44px;
+      height: 44px;
+    }
+
+    .sign-out {
+      height: 44px;
     }
   }
 </style>
