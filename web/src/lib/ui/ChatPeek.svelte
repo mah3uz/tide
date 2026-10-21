@@ -1,23 +1,21 @@
 <script lang="ts">
-  let {
-    from,
-    text,
-    onopen
-  }: {
-    from: string;
-    text: string;
-    onopen: () => void;
-  } = $props();
+  import { chatMessagePreview } from '#lib/chat/images.js';
+  import type { ChatMessage } from '#lib/rtc/room.svelte.js';
+  import { isGuest } from './participantColor.js';
+
+  let { message, onopen }: { message: ChatMessage; onopen: () => void } = $props();
 
   // One line, as plain text: the chat sheet is where a message is read.
   const line = $derived.by(() => {
-    const lines = text.trim().split('\n');
+    const lines = chatMessagePreview(message).trim().split('\n');
     return lines.length > 1 ? `${lines[0]}…` : lines[0];
   });
 </script>
 
 <button type="button" class="peek" title="Open chat" data-testid="chat-peek" onclick={onopen}>
-  <span class="from">{from}:</span>
+  {#if isGuest(message.identity)}<span class="guest-tag">Guest</span>{/if}
+  <!-- An image's preview already names who sent it. -->
+  {#if !message.image}<span class="from">{message.from}:</span>{/if}
   <span class="line">{line}</span>
 </button>
 
@@ -49,6 +47,18 @@
     flex: none;
     color: var(--ink);
     font-weight: 600;
+  }
+
+  .guest-tag {
+    flex: none;
+    align-self: center;
+    padding: 0 6px;
+    color: var(--ink-2);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
   }
 
   .line {

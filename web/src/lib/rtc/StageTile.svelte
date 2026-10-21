@@ -70,7 +70,8 @@
   }}
 >
   <div class="media">
-    {#if participant.camera && !videoHidden}
+    <!-- A hidden tile keeps no video attached: with adaptiveStream off it would still be fed. -->
+    {#if participant.camera && !videoHidden && shape !== 'hidden'}
       <!-- Live meeting video does not have a caption track. -->
       <!-- Always muted: audio plays through the persistent remote renderer,
            and an unmuted <video> can be blocked from autoplaying. -->
@@ -113,7 +114,7 @@
     <span class="portal-label" title={participant.name}>
       {#if participant.isLocal}<span class="you">You</span>{:else}{participant.name}{/if}
     </span>
-  {:else}
+  {:else if shape !== 'hidden'}
     <!-- A long name ellipsizes on one line; "(You)" and the muted icon stay. -->
     <div class="name-label" title={participant.name}>
       {#if participant.microphone?.track && !participant.microphone.muted}

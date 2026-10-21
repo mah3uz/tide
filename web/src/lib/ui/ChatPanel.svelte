@@ -6,7 +6,8 @@
   import MessageText from '#lib/chat/MessageText.svelte';
   import ChatImage from '#lib/chat/ChatImage.svelte';
   import { imageTypes } from '#lib/chat/images.js';
-  import { initials, participantColor } from './participantColor.js';
+  import { initials, isGuest, participantColor } from './participantColor.js';
+  import { sheetFocus } from './sheetFocus.js';
 
   let { rtc, onclose }: { rtc: RoomState; onclose?: () => void } = $props();
 
@@ -16,6 +17,7 @@
   const maxComposerLines = 5;
 
   interface Group {
+    key: number;
     first: ChatMessage;
     messages: ChatMessage[];
   }
@@ -36,6 +38,11 @@
     return blocks;
   }
 
+  // A message keeps the key of the group it joined, so a group whose first
+  // message the cap evicts keeps its key and is not mounted again.
+  const groupKeys = new WeakMap<ChatMessage, number>();
+  let nextGroupKey = 0;
+
   let groups = $derived.by(() => {
     const result: Group[] = [];
     let current: Group | undefined;
@@ -48,8 +55,14 @@
         previous.identity === message.identity &&
         previous.from === message.from &&
         message.ts - previous.ts < groupWindow;
-      if (continues) current!.messages.push(message);
-      else result.push((current = { first: message, messages: [message] }));
+      if (continues) {
+        current!.messages.push(message);
+        groupKeys.set(message, current!.key);
+      } else {
+        const key = groupKeys.get(message) ?? nextGroupKey++;
+        groupKeys.set(message, key);
+        result.push((current = { key, first: message, messages: [message] }));
+      }
       previous = message;
     }
     return result;
@@ -61,6 +74,9 @@
     hourCycle: 'h23'
   });
   const fullDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
+
+  // A touch keyboard would rise over half the sheet; there the heading takes focus.
+  const focusTarget = matchMedia('(pointer: fine)').matches ? 'textarea' : 'h2';
 
   const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -207,6 +223,7 @@
   class="chat-sheet"
   class:dropping
   aria-label="Chat"
+  use:sheetFocus={focusTarget}
   ondragenter={dragover}
   ondragover={dragover}
   ondragleave={dragleave}
@@ -215,7 +232,7 @@
   <span class="handle" aria-hidden="true"></span>
   <header>
     <div class="heading">
-      <h2>Chat</h2>
+      <h2 tabindex="-1">Chat</h2>
       <p>Messages disappear when the meeting ends.</p>
     </div>
     {#if onclose}
@@ -236,7 +253,7 @@
       {#if rtc.chat.length === 0}
         <p class="empty">Messages appear here for this meeting only.</p>
       {:else}
-        {#each groups as group (group.first)}
+        {#each groups as group (group.key)}
           {@const time = clock.format(group.first.ts)}
           {@const title = fullDate.format(group.first.ts)}
           {#if group.first.mine}
@@ -260,6 +277,7 @@
               <div class="stack">
                 <span class="meta">
                   <span class="name">{group.first.from}</span>
+                  {#if isGuest(group.first.identity)}<span class="guest-tag">Guest</span>{/if}
                   <time {title} datetime={new Date(group.first.ts).toISOString()}>{time}</time>
                 </span>
                 {#each group.messages as message (message)}
@@ -348,9 +366,9 @@
   .chat-sheet {
     position: fixed;
     z-index: 25;
-    top: 16px;
-    right: 16px;
-    bottom: 16px;
+    top: calc(16px + env(safe-area-inset-top));
+    right: calc(16px + env(safe-area-inset-right));
+    bottom: calc(16px + env(safe-area-inset-bottom));
     display: flex;
     width: 380px;
     max-width: calc(100vw - 32px);
@@ -360,7 +378,6 @@
     background: color-mix(in srgb, var(--surface) 94%, transparent);
     border-radius: var(--r-lg);
     box-shadow: var(--shadow-float);
-    backdrop-filter: blur(16px);
     animation: sheet-in var(--dur-2) var(--ease-out);
   }
 
@@ -389,6 +406,7 @@
     font-size: 18px;
     line-height: 1.2;
     font-weight: 600;
+    outline: none;
   }
 
   .heading p {
@@ -490,6 +508,17 @@
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .guest-tag {
+    flex-shrink: 0;
+    padding: 0 6px;
+    color: var(--ink-2);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
   }
 
   time {
@@ -725,7 +754,6 @@
     .chat-sheet {
       z-index: 31;
       background: var(--surface);
-      backdrop-filter: none;
     }
 
     .scrim {
@@ -743,7 +771,7 @@
 
   @media (max-width: 639.98px) {
     .chat-sheet {
-      top: 15vh;
+      top: max(15vh, calc(16px + env(safe-area-inset-top)));
       right: 0;
       bottom: 0;
       left: 0;

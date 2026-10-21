@@ -4,6 +4,7 @@
   import type { LobbyRequestInfo } from '#lib/api/types.gen.js';
   import type { ParticipantView, RoomState } from '#lib/rtc/room.svelte.js';
   import { initials, participantColor } from './participantColor';
+  import { sheetFocus } from './sheetFocus';
 
   let {
     rtc,
@@ -62,10 +63,10 @@
 <!-- Below 900px the sheet lies over a scrim; a tap on it closes the sheet. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="scrim" onclick={onclose}></div>
-<aside class="people-panel" aria-label="People">
+<aside class="people-panel" aria-label="People" use:sheetFocus={'h2'}>
   <span class="handle" aria-hidden="true"></span>
   <header>
-    <h2>People</h2>
+    <h2 tabindex="-1">People</h2>
     <span class="count">{rtc.participants.length}</span>
     <button type="button" class="close" aria-label="Close" title="Close" onclick={onclose}>
       <X size={16} weight="regular" aria-hidden="true" />
@@ -163,9 +164,9 @@
   .people-panel {
     position: fixed;
     z-index: 15;
-    top: 16px;
-    right: 16px;
-    bottom: 16px;
+    top: calc(16px + env(safe-area-inset-top));
+    right: calc(16px + env(safe-area-inset-right));
+    bottom: calc(16px + env(safe-area-inset-bottom));
     display: flex;
     width: 380px;
     max-width: calc(100vw - 32px);
@@ -196,6 +197,7 @@
   }
 
   h2 {
+    outline: none;
     font-size: 17px;
     font-weight: 600;
     letter-spacing: -0.01em;
@@ -433,7 +435,7 @@
 
   @media (max-width: 639.98px) {
     .people-panel {
-      top: 15vh;
+      top: max(15vh, calc(16px + env(safe-area-inset-top)));
       right: 0;
       bottom: 0;
       left: 0;

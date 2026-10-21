@@ -6,7 +6,7 @@
 
 <!-- One line: whitespace between these tags would show inside the message. -->
 <!-- prettier-ignore -->
-{#snippet inline(nodes: Inline[])}{#each nodes as node, index (index)}{#if node.type === 'text'}{node.text}{:else if node.type === 'break'}<br />{:else if node.type === 'code'}<code>{node.text}</code>{:else if node.type === 'link'}<a href={node.href} target="_blank" rel="noopener noreferrer nofollow">{node.href}</a>{:else if node.type === 'strong'}<strong>{@render inline(node.children)}</strong>{:else if node.type === 'em'}<em>{@render inline(node.children)}</em>{:else}<s>{@render inline(node.children)}</s>{/if}{/each}{/snippet}
+{#snippet inline(nodes: Inline[])}{#each nodes as node, index (index)}{#if node.type === 'text'}{node.text}{:else if node.type === 'break'}<br />{:else if node.type === 'code'}<code>{node.text}</code>{:else if node.type === 'link'}<a href={node.href} dir="ltr" target="_blank" rel="noopener noreferrer nofollow">{node.href}</a>{:else if node.type === 'strong'}<strong>{@render inline(node.children)}</strong>{:else if node.type === 'em'}<em>{@render inline(node.children)}</em>{:else}<s>{@render inline(node.children)}</s>{/if}{/each}{/snippet}
 
 {#each blocks as block, index (index)}
   {#if block.type === 'codeblock'}
@@ -75,6 +75,7 @@
     text-decoration-thickness: 1.5px;
     text-underline-offset: 2px;
     overflow-wrap: anywhere;
+    unicode-bidi: isolate;
   }
 
   a:hover {
