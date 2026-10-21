@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { ArrowDown, ArrowRight, X } from 'phosphor-svelte';
+  import { ArrowDown, ArrowRight, Paperclip, X } from 'phosphor-svelte';
   import { maximumChatLength, type ChatMessage, type RoomState } from '#lib/rtc/room.svelte.js';
   import { parseMessage, type Block } from '#lib/chat/markdown.js';
   import MessageText from '#lib/chat/MessageText.svelte';
+  import ChatImage from '#lib/chat/ChatImage.svelte';
+  import { imageTypes } from '#lib/chat/images.js';
   import { participantColor } from './participantColor.js';
 
   let { rtc, onclose }: { rtc: RoomState; onclose?: () => void } = $props();
@@ -23,6 +25,8 @@
   let unseen = $state(0);
   let messageList: HTMLDivElement;
   let composer: HTMLTextAreaElement;
+  let picker = $state<HTMLInputElement>();
+  let dropping = $state(false);
   let seenRevision = 0;
 
   const parsed = new WeakMap<ChatMessage, Block[]>();
@@ -129,6 +133,7 @@
     const text = draft.trim();
     if (!text) return;
     error = '';
+    rtc.images.error = '';
     try {
       await rtc.sendChat(text);
       draft = '';
@@ -149,15 +154,74 @@
     void send();
   }
 
+  function attach(files: FileList | null | undefined): void {
+    const file = files?.[0];
+    if (!file || !rtc.images.enabled) return;
+    error = '';
+    void rtc.images.send(file);
+  }
+
+  function picked(): void {
+    attach(picker?.files);
+    if (picker) picker.value = '';
+  }
+
+  function paste(event: ClipboardEvent): void {
+    const data = event.clipboardData;
+    // Office apps copy text with a picture of it; the text is what was meant.
+    if (!rtc.images.enabled || !data?.files.length || data.types.includes('text/plain')) return;
+    event.preventDefault();
+    attach(data.files);
+  }
+
+  const carriesFiles = (event: DragEvent) =>
+    rtc.images.enabled && (event.dataTransfer?.types.includes('Files') ?? false);
+
+  function dragover(event: DragEvent): void {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    dropping = true;
+  }
+
+  function dragleave(event: DragEvent): void {
+    const into = event.relatedTarget;
+    if (!(into instanceof Node) || !(event.currentTarget as Node).contains(into)) dropping = false;
+  }
+
+  function drop(event: DragEvent): void {
+    dropping = false;
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    attach(event.dataTransfer?.files);
+  }
+
   function submit(event: SubmitEvent): void {
     event.preventDefault();
     void send();
   }
 </script>
 
+{#snippet bubble(message: ChatMessage)}
+  {#if message.image}
+    <div class="bubble picture-bubble" in:enter>
+      <ChatImage image={message.image} from={message.from} ts={message.ts} />
+    </div>
+  {:else}
+    <div class="bubble" in:enter><MessageText blocks={blocksOf(message)} /></div>
+  {/if}
+{/snippet}
+
 <button class="scrim" type="button" tabindex="-1" aria-hidden="true" onclick={onclose}></button>
 
-<aside class="chat-sheet" aria-label="Chat">
+<aside
+  class="chat-sheet"
+  class:dropping
+  aria-label="Chat"
+  ondragenter={dragover}
+  ondragover={dragover}
+  ondragleave={dragleave}
+  ondrop={drop}
+>
   <span class="handle" aria-hidden="true"></span>
   <header>
     <div class="heading">
@@ -192,7 +256,7 @@
                 ></span
               >
               {#each group.messages as message (message)}
-                <div class="bubble" in:enter><MessageText blocks={blocksOf(message)} /></div>
+                {@render bubble(message)}
               {/each}
             </div>
           {:else}
@@ -209,7 +273,7 @@
                   <time {title} datetime={new Date(group.first.ts).toISOString()}>{time}</time>
                 </span>
                 {#each group.messages as message (message)}
-                  <div class="bubble" in:enter><MessageText blocks={blocksOf(message)} /></div>
+                  {@render bubble(message)}
                 {/each}
               </div>
             </div>
@@ -227,7 +291,28 @@
   </div>
 
   <form onsubmit={submit}>
-    <div class="composer">
+    <div class="composer" class:attaching={rtc.images.enabled}>
+      {#if rtc.images.enabled}
+        <button
+          class="attach"
+          type="button"
+          aria-label="Attach image"
+          title="Attach image"
+          disabled={rtc.images.sending}
+          onclick={() => picker?.click()}
+        >
+          <Paperclip size={16} weight="regular" aria-hidden="true" />
+        </button>
+        <input
+          bind:this={picker}
+          class="picker"
+          type="file"
+          accept={imageTypes.join(',')}
+          tabindex="-1"
+          aria-hidden="true"
+          onchange={picked}
+        />
+      {/if}
       <textarea
         bind:this={composer}
         bind:value={draft}
@@ -238,16 +323,27 @@
         maxlength={maximumChatLength}
         placeholder="Message everyone"
         onkeydown={keydown}
+        onpaste={paste}
       ></textarea>
       <button class="send" type="submit" disabled={!draft.trim()} aria-label="Send message">
         <ArrowRight size={16} weight="regular" aria-hidden="true" />
       </button>
     </div>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    {#if rtc.images.sending}
+      <p class="status" role="status">
+        {rtc.images.progress === undefined
+          ? 'Preparing image…'
+          : `Sending image… ${Math.round(rtc.images.progress * 100)}%`}
+      </p>
+    {/if}
+    {#if error || rtc.images.error}
+      <p class="error" role="alert">{error || rtc.images.error}</p>
+    {/if}
     <div class="footer">
       <span class="hint">
         <span>**bold** *italic* `code` ```block```</span>
         <span>Shift+Enter for a new line</span>
+        {#if rtc.images.enabled}<span>Paste or drop an image · GIFs send one frame</span>{/if}
       </span>
       {#if draft.length >= counterThreshold}
         <span class="counter" class:full={draft.length >= maximumChatLength}>
@@ -435,6 +531,14 @@
     border-radius: 18px 6px 6px 18px;
   }
 
+  /* The picture is the bubble: clipped to its corners, so grouping shapes it like text. */
+  .picture-bubble,
+  .mine .picture-bubble {
+    padding: 0;
+    overflow: hidden;
+    background: var(--surface-2);
+  }
+
   .mine > .meta + .bubble {
     border-top-right-radius: 4px;
   }
@@ -490,6 +594,53 @@
     border: 1px solid var(--line-strong);
     border-radius: 22px;
     transition: border-color var(--dur-1) var(--ease-out);
+  }
+
+  .composer.attaching {
+    padding-left: 5px;
+  }
+
+  .attach {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    padding: 0;
+    place-items: center;
+    color: var(--ink-2);
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-pill);
+    transition:
+      color var(--dur-1) var(--ease-out),
+      background-color var(--dur-1) var(--ease-out);
+  }
+
+  .attach:hover:not(:disabled) {
+    color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+
+  .attach:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  .picker {
+    display: none;
+  }
+
+  .chat-sheet.dropping {
+    outline: 2px dashed var(--accent);
+    outline-offset: -8px;
+  }
+
+  .status {
+    margin: 0;
+    padding: 0 6px;
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 12px;
   }
 
   .composer:focus-within {
@@ -636,7 +787,8 @@
       font-size: 16px;
     }
 
-    .send {
+    .send,
+    .attach {
       width: 40px;
       height: 40px;
     }
