@@ -205,7 +205,7 @@
 {#snippet shareButton(labelled: boolean)}
   <button
     type="button"
-    class="round well"
+    class="round well share-control"
     class:labelled
     class:active={rtc.screenShareEnabled}
     aria-label={rtc.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
@@ -268,7 +268,7 @@
 {#snippet viewButton(labelled: boolean)}
   <button
     type="button"
-    class="round"
+    class="round view-control"
     class:labelled
     aria-label={view === 'grid' ? 'Speaker view' : 'Grid view'}
     aria-pressed={view === 'speaker'}
@@ -897,6 +897,52 @@
 
     .caret {
       width: 26px;
+    }
+  }
+
+  /* Beside an open side sheet the stage's dock is a container as wide as the
+     room left of the sheet. The capsule tightens to fit it, then keeps the
+     everyday controls; share and record stay while they are on. */
+  @container dock (max-width: 560px) {
+    .capsule {
+      gap: 4px;
+      padding: 6px;
+    }
+
+    .separator,
+    .leave-text {
+      display: none;
+    }
+
+    .caret {
+      width: 22px;
+    }
+
+    button.leave {
+      width: var(--btn);
+      padding: 0;
+      justify-content: center;
+    }
+  }
+
+  @container dock (max-width: 435px) {
+    .capsule {
+      --btn: 40px;
+    }
+
+    .caret,
+    .view-control,
+    .share-control:not(.active),
+    .record-group:not(:has(.recording)) {
+      display: none;
+    }
+  }
+
+  @container dock (max-width: 271px) {
+    .capsule {
+      --btn: 36px;
+
+      gap: 2px;
     }
   }
 

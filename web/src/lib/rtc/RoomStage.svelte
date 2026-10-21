@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { Screencast } from 'phosphor-svelte';
+  import { ArrowSquareIn, ArrowSquareOut, Screencast } from 'phosphor-svelte';
   import { kick, muteParticipant } from '#lib/api/client.js';
   import type { LobbyRequestInfo } from '#lib/api/types.gen.js';
   import BrandMark from '#lib/ui/BrandMark.svelte';
@@ -16,6 +16,7 @@
   import RemoteAudioRenderer from './RemoteAudioRenderer.svelte';
   import { ConnectionState } from 'livekit-client';
   import { attachMediaTrack } from './mediaElement';
+  import { popoutMethod, popOutVideo, popOutWindow, type Popout } from './sharePopout';
   import type { ChatMessage, RoomState } from './room.svelte';
   import { stageLayout, stripHeight, type Rect } from './stageLayout';
 
@@ -145,7 +146,56 @@
     seenChatRevision = revision;
   });
 
-  onDestroy(() => clearTimeout(peekTimer));
+  onDestroy(() => {
+    clearTimeout(peekTimer);
+    bringBack();
+  });
+
+  const popout = popoutMethod();
+  let shareVideo = $state<HTMLVideoElement>();
+  let poppedOut = $state<Popout>();
+  let poppingOut = false;
+
+  // A share that ends takes its window with it.
+  $effect(() => {
+    if (!focusParticipant?.screenShare) bringBack();
+  });
+
+  async function popOut(): Promise<void> {
+    if (!popout || poppingOut || poppedOut) return;
+    poppingOut = true;
+    try {
+      if (popout !== 'document') {
+        if (shareVideo) await popOutVideo(shareVideo, popout);
+        return;
+      }
+      poppedOut = await popOutWindow(
+        {
+          rtc,
+          get roomName() {
+            return roomName;
+          },
+          get presenter() {
+            return focusParticipant;
+          },
+          get speaker() {
+            return promoted;
+          },
+          onback: bringBack
+        },
+        () => (poppedOut = undefined)
+      );
+    } catch {
+      // The browser said no (no gesture, or blocked by policy): the share
+      // simply stays where it is.
+    } finally {
+      poppingOut = false;
+    }
+  }
+
+  function bringBack(): void {
+    poppedOut?.close();
+  }
 
   // One preview at a time: a newer message replaces the one showing.
   function showPeek(message: ChatMessage): void {
@@ -197,6 +247,7 @@
   class="stage"
   data-layout={layoutMode}
   data-sheet-open={sheetOpen ? '' : undefined}
+  data-peek={peek && !chatOpen ? '' : undefined}
   style:--strip-h={`${stripHeight}px`}
 >
   <header class="stage-header" class:wrapping={rtc.playbackBlocked}>
@@ -253,6 +304,7 @@
           {#key focusParticipant.screenShare.publicationSid}
             <!-- Live screen share does not have a caption track. -->
             <video
+              bind:this={shareVideo}
               use:attachMediaTrack={focusParticipant.screenShare}
               autoplay
               playsinline
@@ -260,14 +312,34 @@
               aria-label={`${focusParticipant.name}'s screen share`}
             ></video>
           {/key}
+          {#if poppedOut}
+            <div class="popped-out">
+              <p>Screen share is in its own window</p>
+              <button type="button" class="share-pill" onclick={bringBack}>
+                <ArrowSquareIn size={16} weight="regular" aria-hidden="true" />
+                <span>Bring it back</span>
+              </button>
+            </div>
+          {/if}
         </div>
         <span class="focus-label">
           <Screencast size={16} weight="regular" aria-hidden="true" />
           <span class="focus-name">{focusParticipant.name} · Screen</span>
         </span>
-        <!-- Reserved for the share's own actions (a "Pop out" button lands
-             here); kept empty so nothing else claims this corner. -->
-        <div class="share-actions" data-slot="share-actions"></div>
+        <div class="share-actions" data-slot="share-actions">
+          {#if popout && !poppedOut}
+            <button
+              type="button"
+              class="share-pill"
+              aria-label="Pop out screen share"
+              title="Pop out screen share"
+              onclick={() => void popOut()}
+            >
+              <ArrowSquareOut size={16} weight="regular" aria-hidden="true" />
+              <span>Pop out</span>
+            </button>
+          {/if}
+        </div>
       </article>
     {/if}
 
@@ -525,6 +597,7 @@
   }
 
   .share-screen video {
+    grid-area: 1 / 1;
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -566,6 +639,61 @@
     gap: 8px;
   }
 
+  .share-pill {
+    display: inline-flex;
+    height: 40px;
+    padding: 0 16px 0 14px;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    border: 0;
+    border-radius: var(--r-pill);
+    transition: background-color var(--dur-1) var(--ease-out);
+  }
+
+  .share-pill:hover {
+    background: var(--surface);
+  }
+
+  .share-pill :global(svg) {
+    flex: none;
+    color: var(--accent);
+  }
+
+  /* The share's frame while it plays in its own window: the video stays
+     attached underneath, so bringing it back is instant. */
+  .popped-out {
+    display: grid;
+    grid-area: 1 / 1;
+    place-content: center;
+    justify-items: center;
+    gap: 16px;
+    padding: 16px;
+    color: var(--ink-2);
+    font-size: 15px;
+    text-align: center;
+    background: var(--surface-2);
+    animation: fade-in var(--dur-2) var(--ease-out);
+  }
+
+  .popped-out p {
+    margin: 0;
+  }
+
+  .popped-out .share-pill {
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
   .overflow-portal {
     z-index: 1;
     display: grid;
@@ -594,7 +722,6 @@
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     pointer-events: none;
-    transition: transform var(--dur-3) var(--ease-out);
   }
 
   .dock > :global(.capsule) {
@@ -611,15 +738,26 @@
     justify-self: start;
   }
 
-  /* With a side sheet open the stage keeps to the space left of it, and the
-     capsule centres on that space; the peek moves above the capsule. */
+  /* With a side sheet open the stage keeps to the space left of it. So does
+     the dock: it is the capsule's container, and the capsule tightens to fit
+     it (ControlBar), sliding over as the sheet comes in. The peek moves above
+     the capsule. */
   @media (min-width: 640px) {
     .stage[data-sheet-open] {
       padding-right: var(--sheet-room);
     }
 
     .stage[data-sheet-open] .dock {
-      transform: translateX(calc((var(--gutter) - var(--sheet-room)) / 2));
+      right: calc(var(--sheet-room) - var(--gutter));
+      padding-inline: 16px;
+      grid-template-columns: minmax(0, 1fr);
+      container: dock / inline-size;
+      animation: dock-aside var(--dur-3) var(--ease-out);
+    }
+
+    .stage[data-sheet-open] .dock > :global(.capsule) {
+      grid-column: 1;
+      justify-self: center;
     }
 
     .stage[data-sheet-open] .peek-slot {
@@ -631,6 +769,12 @@
       grid-column: 1 / -1;
       justify-self: stretch;
       margin: 0;
+    }
+  }
+
+  @keyframes dock-aside {
+    from {
+      transform: translateX(calc((var(--sheet-room) - var(--gutter)) / 2));
     }
   }
 
@@ -727,6 +871,12 @@
       right: 16px;
     }
 
+    .share-pill {
+      height: 34px;
+      padding: 0 14px 0 12px;
+      font-size: 13px;
+    }
+
     /* Not positioned, so the absolutely placed lens is not scrolled or
        clipped with the strip. */
     .tiles.strip {
@@ -757,15 +907,29 @@
       grid-column: 1;
     }
 
+    /* The peek takes the strip's name row while it shows, between the
+       portraits and the capsule, so it never covers a face or a name. */
     .peek-slot {
       position: absolute;
       right: 0;
-      bottom: calc(100% + 12px);
+      bottom: calc(100% + 6px);
       left: 0;
       justify-content: center;
       grid-column: 1 / -1;
       justify-self: stretch;
       margin: 0;
+    }
+
+    .peek-slot :global(.peek) {
+      padding-block: 6px;
+    }
+
+    .tiles.strip :global(.portal-label) {
+      transition: opacity var(--dur-2) var(--ease-out);
+    }
+
+    .stage[data-peek] .tiles.strip :global(.portal-label) {
+      opacity: 0;
     }
   }
 </style>

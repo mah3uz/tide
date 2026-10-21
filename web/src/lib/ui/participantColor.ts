@@ -13,3 +13,11 @@ export function participantColor(identity: string): ParticipantColor {
   }
   return (((hash >>> 0) % 5) + 1) as ParticipantColor;
 }
+
+/** One or two letters for someone shown without video: first and last word. */
+export function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const first = Array.from(words[0] ?? '')[0] ?? '';
+  const last = words.length > 1 ? (Array.from(words.at(-1) ?? '')[0] ?? '') : '';
+  return (first + last).toUpperCase() || '?';
+}
