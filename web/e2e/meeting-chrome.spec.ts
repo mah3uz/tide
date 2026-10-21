@@ -402,13 +402,13 @@ test('names are in the UI font and the clock in mono, and roles are words, not b
 
   const tile = page.locator('[data-testid="participant-tile"]').first();
   await expect(tile).toContainText('Ada Host (You)');
-  expect(await family(tile.getByText('(You)'))).toMatch(/Space Grotesk/);
+  expect(await family(tile.getByText('(You)'))).toMatch(/Roboto/);
   await expect(tile).not.toContainText('YOU');
 
   await page.getByRole('button', { name: /people/i }).click();
   const row = page.locator('.participant-row').first();
   await expect(row).toContainText('Ada Host (You)');
-  expect(await family(row.getByText('Ada Host', { exact: true }))).toMatch(/Space Grotesk/);
+  expect(await family(row.getByText('Ada Host', { exact: true }))).toMatch(/Roboto/);
   const role = row.getByText('Meeting host', { exact: true });
   await expect(role).toBeVisible();
   // Secondary text, with no pill around it.

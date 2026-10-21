@@ -41,11 +41,11 @@ semantic name, never a hex value:
 (`web/scripts/check-css-vars.mjs`), because CSS drops an undefined variable
 silently.
 
-Typography: **Space Grotesk** (variable) for all UI, base 14px/1.45, and
+Typography: **Roboto** (variable) for all UI, base 14px/1.45, and
 **JetBrains Mono** (variable) for anything machine-flavored: room slugs,
 timers, participant counts, keyboard shortcuts. Both are self-hosted through
 `@fontsource-variable` packages; nothing loads from a font CDN. Words people
-read in the meeting (the clock, names, "(You)") stay in Space Grotesk.
+read in the meeting (names, "(You)") stay in Roboto.
 
 **Roles are words, not badges.** No pills or outlined chips for roles: the
 local participant is "Name (You)" and the host carries a secondary line,

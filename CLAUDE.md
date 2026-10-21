@@ -10,7 +10,7 @@ Rules that differ from upstream:
   ARCHITECTURE.md §10. Light and dark themes on one layout (follows the system,
   header toggle; the recorder page is always dark). Use the semantic tokens in
   `web/src/app.css` (`--bg`, `--surface`, `--ink`, `--accent`, `--rec`,
-  `--r-*`...), never hex values. Space Grotesk + JetBrains Mono (self-hosted),
+  `--r-*`...), never hex values. Roboto + JetBrains Mono (self-hosted),
   phosphor-svelte 16px regular icons. Motion: transform/opacity only, nothing
   loops unless live state drives it, reduced motion honoured.
 - `npm run check` fails on an undefined `var(--x)` (no fallback, no

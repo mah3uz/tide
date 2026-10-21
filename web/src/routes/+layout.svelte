@@ -8,7 +8,7 @@
   import { registerServiceWorker } from '#lib/pwa/register.js';
   import Hairline from '#lib/ui/Hairline.svelte';
   import { theme } from '#lib/ui/theme.svelte.js';
-  import '@fontsource-variable/space-grotesk';
+  import '@fontsource-variable/roboto';
   import '@fontsource-variable/jetbrains-mono';
   import '../app.css';
 
