@@ -58,6 +58,8 @@
   const peekDuration = 4_000;
 
   const phone = new MediaQuery('(max-width: 639.98px)');
+  // Below this a side sheet lies over the stage on a scrim (ChatPanel, ParticipantPanel).
+  const sheetOverlays = new MediaQuery('(max-width: 899.98px)');
   const meetingURL = $derived(`${location.origin}/m/${encodeURIComponent(roomSlug)}`);
   let focusParticipant = $derived(rtc.participants.find((participant) => participant.screenShare));
   // Orbit (speaker) view unless you pick the grid; your pick stays put as
@@ -121,6 +123,9 @@
   let peek = $state<ChatMessage>();
   let peekTimer: ReturnType<typeof setTimeout> | undefined;
   let sheetOpen = $derived(peopleOpen || chatOpen);
+  let moreOpen = $state(false);
+  // Over a scrim the sheet is modal: what it covers takes no focus or clicks.
+  let sheetCovers = $derived(sheetOpen && sheetOverlays.current);
 
   $effect(() => {
     if (pending.length > 0 && previousPendingCount === 0) {
@@ -263,7 +268,7 @@
   data-peek={peek && !chatOpen ? '' : undefined}
   style:--strip-h={`${stripHeight}px`}
 >
-  <header class="stage-header" class:wrapping={rtc.playbackBlocked}>
+  <header class="stage-header" class:wrapping={rtc.playbackBlocked} inert={sheetCovers || moreOpen}>
     <div class="room-status" data-testid="stage-cluster">
       <span class="mark"><BrandMark size={16} /></span>
       <h1 class="room-name" title={roomName}>{roomName}</h1>
@@ -305,6 +310,7 @@
     class="media-layout"
     aria-label="Meeting participants"
     data-layout={layoutMode}
+    inert={sheetCovers || moreOpen}
     bind:clientWidth={areaWidth}
     bind:clientHeight={areaHeight}
   >
@@ -415,7 +421,7 @@
 
   <RemoteAudioRenderer participants={rtc.participants} />
 
-  <div class="dock">
+  <div class="dock" inert={sheetCovers}>
     <ControlBar
       {rtc}
       {onleave}
@@ -426,6 +432,7 @@
       {canRecord}
       {view}
       {roomSlug}
+      bind:moreOpen
       ontogglepeople={togglePeople}
       ontogglechat={toggleChat}
       ontoggleview={() => (chosenView = view === 'grid' ? 'speaker' : 'grid')}
@@ -433,7 +440,7 @@
     {#if peek && !chatOpen}
       {#key peek}
         <div class="peek-slot">
-          <ChatPeek from={peek.from} text={peek.text} onopen={toggleChat} />
+          <ChatPeek message={peek} onopen={toggleChat} />
         </div>
       {/key}
     {/if}
@@ -443,7 +450,7 @@
 <style>
   .stage {
     --gutter: 32px;
-    --dock-h: 114px;
+    --dock-h: calc(114px + env(safe-area-inset-bottom));
     --sheet-room: 420px;
 
     display: grid;
@@ -451,7 +458,8 @@
     min-height: 0;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 16px;
-    padding: 20px var(--gutter) var(--dock-h);
+    padding: calc(20px + env(safe-area-inset-top)) calc(var(--gutter) + env(safe-area-inset-right))
+      var(--dock-h) calc(var(--gutter) + env(safe-area-inset-left));
     overflow: hidden;
     color: var(--ink);
   }
@@ -728,9 +736,9 @@
   .dock {
     position: fixed;
     z-index: 20;
-    right: 0;
-    bottom: 24px;
-    left: 0;
+    right: env(safe-area-inset-right);
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    left: env(safe-area-inset-left);
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
@@ -745,7 +753,8 @@
   .peek-slot {
     display: flex;
     min-width: 0;
-    margin-left: 16px;
+    max-width: calc(100% - 32px);
+    margin-inline: 16px;
     grid-column: 3;
     grid-row: 1;
     justify-self: start;
@@ -758,11 +767,11 @@
      the sheet overlays it over a scrim instead (ChatPanel, ParticipantPanel). */
   @media (min-width: 900px) {
     .stage[data-sheet-open] {
-      padding-right: var(--sheet-room);
+      padding-right: calc(var(--sheet-room) + env(safe-area-inset-right));
     }
 
     .stage[data-sheet-open] .dock {
-      right: calc(var(--sheet-room) - var(--gutter));
+      right: calc(var(--sheet-room) - var(--gutter) + env(safe-area-inset-right));
       padding-inline: 16px;
       grid-template-columns: minmax(0, 1fr);
       container: dock / inline-size;
@@ -782,6 +791,7 @@
       justify-content: center;
       grid-column: 1 / -1;
       justify-self: stretch;
+      max-width: none;
       margin: 0;
     }
   }
@@ -795,11 +805,11 @@
   @media (max-width: 1099.98px) {
     .stage {
       --gutter: 24px;
-      --dock-h: 92px;
+      --dock-h: calc(92px + env(safe-area-inset-bottom));
     }
 
     .dock {
-      bottom: 16px;
+      bottom: calc(16px + env(safe-area-inset-bottom));
     }
   }
 
@@ -811,7 +821,7 @@
       --dock-h: calc(92px + env(safe-area-inset-bottom));
 
       gap: 12px;
-      padding-top: 16px;
+      padding-top: calc(16px + env(safe-area-inset-top));
     }
 
     .stage-header {
@@ -931,6 +941,7 @@
       justify-content: center;
       grid-column: 1 / -1;
       justify-self: stretch;
+      max-width: none;
       margin: 0;
     }
 

@@ -585,3 +585,128 @@ test('on a phone a chat peek never covers the strip’s faces or names', async (
     }
   }
 });
+
+test('a sheet takes the keyboard as it opens and hands it back to its control', async ({
+  page
+}) => {
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+
+  // Without this a keyboard or screen-reader user opens a sheet and is left
+  // on the capsule, then lands on the page's start when it closes.
+  await page.getByRole('button', { name: 'Open chat' }).focus();
+  await page.keyboard.press('Enter');
+  const chat = page.getByRole('complementary', { name: 'Chat' });
+  await expect(chat.getByRole('textbox', { name: 'Chat message' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(chat).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Open chat' })).toBeFocused();
+
+  await page.getByRole('button', { name: 'Open people' }).focus();
+  await page.keyboard.press('Enter');
+  const people = page.getByRole('complementary', { name: 'People' });
+  await expect(people.getByRole('heading', { name: 'People' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(people).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Open people' })).toBeFocused();
+});
+
+test('on a phone the stage behind a sheet is out of reach until it closes', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  const inert = (selector: string) =>
+    page.locator(selector).evaluate((element) => element.closest('[inert]') !== null);
+
+  // The scrim makes a sheet look modal; inert makes it so for the keyboard
+  // and screen readers, which would otherwise wander through the call behind.
+  await page.getByRole('button', { name: 'Open chat' }).click();
+  const chat = page.getByRole('complementary', { name: 'Chat' });
+  await expect(chat).toBeVisible();
+  for (const selector of ['.stage-header', '.media-layout', '.capsule']) {
+    expect(await inert(selector), selector).toBe(true);
+  }
+  expect(await inert('.chat-sheet')).toBe(false);
+  await chat.getByRole('button', { name: 'Close chat' }).click();
+  for (const selector of ['.stage-header', '.media-layout', '.capsule']) {
+    expect(await inert(selector), selector).toBe(false);
+  }
+
+  const more = page.getByRole('button', { name: 'More controls' });
+  await more.focus();
+  await page.keyboard.press('Enter');
+  const sheet = page.getByRole('dialog', { name: 'More controls' });
+  await expect(sheet).toBeVisible();
+  await expect
+    .poll(() => sheet.evaluate((element) => element.contains(document.activeElement)))
+    .toBe(true);
+  for (const selector of ['.stage-header', '.media-layout', '.capsule']) {
+    expect(await inert(selector), selector).toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(more).toBeFocused();
+  expect(await inert('.media-layout')).toBe(false);
+});
+
+test('a tile left off the stage keeps no video or level meter', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  // Eight others with live cameras and microphones: more than the orbit holds.
+  await page.evaluate(() => {
+    type TestRoom = {
+      handleParticipantUpdates(infos: unknown[]): void;
+      remoteParticipants: Map<
+        string,
+        { addSubscribedMediaTrack(track: MediaStreamTrack, sid: string, stream: MediaStream): void }
+      >;
+    };
+    const room = (window as Window & { __tideRoom?: TestRoom }).__tideRoom!;
+    const audio = new AudioContext();
+    room.handleParticipantUpdates(
+      Array.from({ length: 8 }, (_, index) => ({
+        sid: `PA_${index}`,
+        identity: `remote-${index}`,
+        name: `Remote ${index}`,
+        state: 2,
+        metadata: '',
+        attributes: {},
+        kind: 0,
+        version: 1,
+        joinedAt: 0n,
+        dataTracks: [],
+        permission: { canSubscribe: true, canPublish: true, canPublishData: true },
+        tracks: [
+          { sid: `TR_cam_${index}`, type: 1, source: 1, name: 'camera', muted: false },
+          { sid: `TR_mic_${index}`, type: 0, source: 2, name: 'microphone', muted: false }
+        ]
+      }))
+    );
+    for (let index = 0; index < 8; index++) {
+      const participant = room.remoteParticipants.get(`remote-${index}`)!;
+      const canvas = document.createElement('canvas');
+      canvas.getContext('2d')!.fillRect(0, 0, 8, 8);
+      const video = canvas.captureStream();
+      participant.addSubscribedMediaTrack(video.getVideoTracks()[0], `TR_cam_${index}`, video);
+      const mic = audio.createMediaStreamDestination().stream;
+      participant.addSubscribedMediaTrack(mic.getAudioTracks()[0], `TR_mic_${index}`, mic);
+    }
+  });
+
+  const tiles = page.getByTestId('participant-tile');
+  await expect(tiles).toHaveCount(9);
+  // Shown tiles play their camera and the lens its meter, so the hidden
+  // ones below are bare by design, not because nothing was published.
+  await expect(page.locator('[data-shape="lens"] video')).toHaveCount(1);
+  await expect(page.locator('[data-shape="lens"] .waveform')).toHaveCount(1);
+  const hidden = page.locator('[data-testid="participant-tile"][data-shape="hidden"]');
+  expect(await hidden.count()).toBeGreaterThan(0);
+  // With adaptiveStream off an attached <video> keeps its stream coming,
+  // and a meter keeps analysing audio, for a tile no one can see.
+  await expect(hidden.locator('video')).toHaveCount(0);
+  await expect(hidden.locator('.waveform')).toHaveCount(0);
+});

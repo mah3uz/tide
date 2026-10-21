@@ -1,6 +1,6 @@
 import { test, expect, chromium, type BrowserContext, type Page } from '@playwright/test';
 import { createRoomAndGetSlug, dexLogin, joinAsGuestThroughLobby } from './helpers';
-import { mockApi } from './mock-api';
+import { defaultState, mockApi } from './mock-api';
 import { fakeSfu, fakeSfuLaunchArgs } from './fake-sfu';
 
 test('chat is bidirectional, counts unread messages, and has no rejoin history', async () => {
@@ -236,4 +236,116 @@ test.describe('chat messages from other participants', () => {
     await expect(chat.getByText('more news')).toBeInViewport();
     await expect(pill).toHaveCount(0);
   });
+
+  test('a link shows the address it really opens, whatever its letters or direction marks', async ({
+    page
+  }) => {
+    await openChat(page);
+    // A Cyrillic "а" passes for "example.com", and U+202E flips "gnp.exe" so
+    // it reads "exe.png": shown as typed, the link would lie about itself.
+    await receive(page, 'roadmap: https://exаmple.com/‮gnp.exe');
+    const link = page.getByRole('complementary', { name: 'Chat' }).getByRole('link');
+    await expect(link).toHaveText('https://xn--exmple-4nf.com/%E2%80%AEgnp.exe');
+    await expect(link).toHaveAttribute('href', 'https://xn--exmple-4nf.com/%E2%80%AEgnp.exe');
+    await expect(link).toHaveAttribute('dir', 'ltr');
+    await expect(link).toHaveCSS('unicode-bidi', 'isolate');
+  });
+
+  test('a guest is marked as one beside their name, so they cannot pass as the host', async ({
+    page
+  }) => {
+    await openChat(page);
+    await receive(page, 'from the real host', 'Ada Host', 'host:0001');
+    await receive(page, 'from someone using her name', 'Ada Host', 'guest:ada');
+    const chat = page.getByRole('complementary', { name: 'Chat' });
+    const group = (text: string) => chat.locator('.group').filter({ hasText: text });
+    await expect(group('from the real host').locator('.guest-tag')).toHaveCount(0);
+    await expect(group('from someone using her name').locator('.guest-tag')).toHaveText('Guest');
+
+    // The peek is read without the sheet, so it carries the mark too.
+    await chat.getByRole('button', { name: 'Close chat' }).click();
+    await receive(page, 'quick one', 'Ada Host', 'guest:ada');
+    await expect(page.getByTestId('chat-peek')).toContainText('Guest');
+    await receive(page, 'and another', 'Ada Host', 'host:0001');
+    await expect(page.getByTestId('chat-peek')).toContainText('and another');
+    await expect(page.getByTestId('chat-peek').locator('.guest-tag')).toHaveCount(0);
+  });
+
+  test('groups the cap leaves in the log stay where they are as old messages go', async ({
+    page
+  }) => {
+    await openChat(page);
+    await receive(page, 'the oldest group', 'Bo', 'guest:bo');
+    for (let i = 1; i < 200; i++) await receive(page, `still Bo ${i}`, 'Bo', 'guest:bo');
+    const chat = page.getByRole('complementary', { name: 'Chat' });
+    const bo = chat.locator('.group').filter({ hasText: 'still Bo 199' });
+    await bo.evaluate((element) => element.setAttribute('data-seen', ''));
+
+    // The 201st message evicts Bo's first; his group must not be rebuilt
+    // (and animate in again) under everyone reading it.
+    await receive(page, 'a new voice', 'Cy', 'guest:cy');
+    await expect(chat.getByText('a new voice')).toBeVisible();
+    await expect(chat.getByText('the oldest group')).toHaveCount(0);
+    await expect(bo).toHaveAttribute('data-seen', '');
+  });
+
+  test("an image's peek says who sent an image", async ({ page }) => {
+    await mockApi(page, { ...defaultState(), chatImages: true });
+    const sfu = await fakeSfu(page);
+    await page.goto('/m/standup');
+    for (const control of ['camera', 'microphone']) {
+      const toggle = page.locator(`button[aria-pressed][aria-label*="${control}" i]`).first();
+      await expect(toggle).toBeVisible();
+      if ((await toggle.getAttribute('aria-pressed')) === 'true') await toggle.click();
+    }
+    await page.getByRole('button', { name: 'Join meeting' }).click();
+    await expect(page.getByRole('button', { name: 'Open chat' })).toBeVisible();
+    sfu.addParticipant('guest:pat', 'Pat Lee');
+    await page.waitForFunction(() =>
+      (window as unknown as ImageWindow).__tideRoom.remoteParticipants.has('guest:pat')
+    );
+
+    // Delivered as the media server delivers a chat image: one data stream.
+    await page.evaluate(async () => {
+      const canvas = new OffscreenCanvas(64, 40);
+      canvas.getContext('2d')!.fillRect(0, 0, 64, 40);
+      const bytes = new Uint8Array(
+        await (await canvas.convertToBlob({ type: 'image/webp' })).arrayBuffer()
+      );
+      const manager = (window as unknown as ImageWindow).__tideRoom.incomingDataStreamManager;
+      const streamId = crypto.randomUUID();
+      const send = (value: unknown) =>
+        manager.handleDataStreamPacket({ participantIdentity: 'guest:pat', value }, 0);
+      send({
+        case: 'streamHeader',
+        value: {
+          streamId,
+          topic: 'chat-image',
+          mimeType: 'image/webp',
+          timestamp: BigInt(Date.now()),
+          totalLength: BigInt(bytes.length),
+          attributes: {},
+          compression: 0,
+          contentHeader: { case: 'byteHeader', value: { name: 'image' } }
+        }
+      });
+      send({
+        case: 'streamChunk',
+        value: { streamId, chunkIndex: 0n, content: bytes, version: 0 }
+      });
+      send({ case: 'streamTrailer', value: { streamId, reason: '', attributes: {} } });
+    });
+
+    // An image has no text: a peek of its text alone would be an empty bubble.
+    await expect(page.getByTestId('chat-peek')).toContainText('Pat Lee sent an image');
+  });
 });
+
+type ImageWindow = Window & {
+  __tideRoom: {
+    remoteParticipants: Map<string, unknown>;
+    incomingDataStreamManager: {
+      handleDataStreamPacket(packet: unknown, encryptionType: number): void;
+    };
+  };
+};

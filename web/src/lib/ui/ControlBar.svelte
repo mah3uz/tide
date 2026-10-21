@@ -21,6 +21,7 @@
   import { MediaQuery } from 'svelte/reactivity';
   import type { RoomState } from '#lib/rtc/room.svelte.js';
   import { endMeeting, startRecording, stopRecording } from '#lib/api/client.js';
+  import { sheetFocus } from './sheetFocus.js';
 
   let {
     rtc,
@@ -32,6 +33,7 @@
     canRecord = false,
     roomSlug = '',
     view = 'grid',
+    moreOpen = $bindable(false),
     ontogglepeople = () => undefined,
     ontogglechat = () => undefined,
     ontoggleview = () => undefined
@@ -46,6 +48,8 @@
     canRecord?: boolean;
     roomSlug?: string;
     view?: 'grid' | 'speaker';
+    /** The phone's More sheet; bound so the stage behind it can go inert. */
+    moreOpen?: boolean;
     ontogglepeople?: () => void;
     ontogglechat?: () => void;
     ontoggleview?: () => void;
@@ -69,7 +73,6 @@
   let endBusy = $state(false);
   let endError = $state('');
   let deviceMenu = $state<DeviceMenuKind | ''>('');
-  let moreOpen = $state(false);
 
   $effect(() => {
     if (!phone.current) moreOpen = false;
@@ -291,7 +294,7 @@
   }}
 />
 
-<nav class="capsule" aria-label="Meeting controls">
+<nav class="capsule" aria-label="Meeting controls" inert={phone.current && moreOpen}>
   <div class="split" class:primary={rtc.micEnabled} class:off={!rtc.micEnabled}>
     <button
       type="button"
@@ -413,7 +416,7 @@
         toggleMore();
       }}
     >
-      <DotsThree size={20} weight="bold" aria-hidden="true" />
+      <DotsThree size={20} weight="regular" aria-hidden="true" />
     </button>
   {:else}
     <span class="separator" aria-hidden="true"></span>
@@ -496,6 +499,7 @@
     role="dialog"
     tabindex="-1"
     aria-label="More controls"
+    use:sheetFocus={'button'}
     onclick={(event) => event.stopPropagation()}
   >
     <span class="handle" aria-hidden="true"></span>
@@ -987,7 +991,7 @@
       bottom: 0;
       left: 0;
       display: grid;
-      max-height: 85dvh;
+      max-height: min(85dvh, calc(100dvh - 16px - env(safe-area-inset-top)));
       padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
       gap: 16px;
       overflow-y: auto;

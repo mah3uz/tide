@@ -13,11 +13,15 @@
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let bars = $state<HTMLSpanElement[]>([]);
+  const shown = weights.map(() => idleScale);
 
   function apply(level: number): void {
     for (const [index, bar] of bars.entries()) {
       if (!bar) continue;
       const scale = idleScale + (1 - idleScale) * Math.min(1, level) * weights[index];
+      // Silence would otherwise restyle every bar every frame.
+      if (Math.abs(scale - shown[index]) < 0.01) continue;
+      shown[index] = scale;
       bar.style.transform = `scaleY(${scale.toFixed(3)})`;
     }
   }

@@ -84,7 +84,7 @@ function parseInline(source: string): Inline[] {
     const link = matchLink(source, i);
     if (link) {
       flush();
-      nodes.push({ type: 'link', href: link });
+      nodes.push({ type: 'link', href: link.href });
       i += link.length;
       continue;
     }
@@ -148,7 +148,7 @@ function findClose(source: string, marker: string, from: number): number {
 const urlPattern = /^https?:\/\/[^\s<>"'`]+/i;
 
 /** A bare http(s) URL at `start`, without the punctuation that ends a sentence. */
-function matchLink(source: string, start: number): string | undefined {
+function matchLink(source: string, start: number): { href: string; length: number } | undefined {
   if (source[start] !== 'h' && source[start] !== 'H') return undefined;
   if (isWordChar(source[start - 1])) return undefined;
   // The URL half of a masked link stays literal along with its text.
@@ -168,10 +168,11 @@ function matchLink(source: string, start: number): string | undefined {
     if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) {
       return undefined;
     }
+    // Shown as well as opened: punycode shows a homograph host; encoded bidi controls cannot reorder it.
+    return { href: parsed.href, length: url.length };
   } catch {
     return undefined;
   }
-  return url;
 }
 
 function count(text: string, char: string): number {

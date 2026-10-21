@@ -21,3 +21,8 @@ export function initials(name: string): string {
   const last = words.length > 1 ? (Array.from(words.at(-1) ?? '')[0] ?? '') : '';
   return (first + last).toUpperCase() || '?';
 }
+
+/** The server mints every guest's identity with this prefix; no one can choose it. */
+export function isGuest(identity: string): boolean {
+  return identity.startsWith('guest:');
+}
