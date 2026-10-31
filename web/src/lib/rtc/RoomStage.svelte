@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { ArrowSquareIn, ArrowSquareOut, Screencast } from 'phosphor-svelte';
+  import { AppWindow, ArrowSquareIn, ArrowSquareOut, Screencast } from 'phosphor-svelte';
   import { kick, muteParticipant } from '#lib/api/client.js';
   import type { LobbyRequestInfo } from '#lib/api/types.gen.js';
   import BrandMark from '#lib/ui/BrandMark.svelte';
@@ -17,7 +17,7 @@
   import RemoteAudioRenderer from './RemoteAudioRenderer.svelte';
   import { ConnectionState } from 'livekit-client';
   import { attachMediaTrack } from './mediaElement';
-  import { popoutMethod, popOutVideo, popOutWindow, type Popout } from './sharePopout';
+  import { popoutMethod, popOutTab, popOutVideo, popOutWindow, type Popout } from './sharePopout';
   import type { ChatMessage, RoomState } from './room.svelte';
   import { stageLayout, stripHeight, type Rect } from './stageLayout';
 
@@ -170,15 +170,20 @@
     if (!focusParticipant?.screenShare) bringBack();
   });
 
-  async function popOut(): Promise<void> {
-    if (!popout || poppingOut || poppedOut) return;
+  const canOpenWindow =
+    typeof window !== 'undefined' &&
+    typeof window.open === 'function' &&
+    !window.matchMedia('(pointer: coarse)').matches;
+
+  async function popOut(open: typeof popOutWindow = popOutWindow): Promise<void> {
+    if (poppingOut || poppedOut) return;
     poppingOut = true;
     try {
-      if (popout !== 'document') {
-        if (shareVideo) await popOutVideo(shareVideo, popout);
+      if (open === popOutWindow && popout !== 'document') {
+        if (popout && shareVideo) await popOutVideo(shareVideo, popout);
         return;
       }
-      poppedOut = await popOutWindow(
+      poppedOut = await open(
         {
           rtc,
           get roomName() {
@@ -367,6 +372,18 @@
             >
               <ArrowSquareOut size={16} weight="regular" aria-hidden="true" />
               <span>Pop out</span>
+            </button>
+          {/if}
+          {#if canOpenWindow && !poppedOut}
+            <button
+              type="button"
+              class="share-pill"
+              aria-label="Open screen share in a new window"
+              title="Open screen share in a new window"
+              onclick={() => void popOut(popOutTab)}
+            >
+              <AppWindow size={16} weight="regular" aria-hidden="true" />
+              <span>New window</span>
             </button>
           {/if}
         </div>

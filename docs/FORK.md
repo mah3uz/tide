@@ -107,8 +107,8 @@ following, each deliberately small. File transfer in general stays out.
   shell and static assets only, never `/api`, `/rtc` or any media.
 - **Screen share popout.** A share can be lifted out of the page into a small
   window, using Document Picture-in-Picture where the browser has it, the video
-  alone in system picture-in-picture, or WebKit's presentation mode
-  (`lib/rtc/sharePopout.ts`).
+  alone in system picture-in-picture, or WebKit's presentation mode; or into an
+  ordinary resizable "New window" (desktop only) (`lib/rtc/sharePopout.ts`).
 - **Minimal markdown in chat.** Chat text supports `**bold**`, `*italic*` or
   `_italic_`, `~~strike~~`, `` `inline code` ``, fenced code blocks, and bare
   http(s) links (which open with `noopener noreferrer nofollow`). Not supported,

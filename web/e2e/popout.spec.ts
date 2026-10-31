@@ -301,3 +301,76 @@ test('your own share offers no video picture-in-picture, which would play it bac
   await page.getByRole('button', { name: 'Stop presenting' }).click();
   await expect(page.getByTestId('focus-pane')).toHaveCount(0);
 });
+
+/** Opens the share in a plain browser window and returns it once the share is mounted there. */
+async function openWindow(page: Page): Promise<Page> {
+  const [popup] = await Promise.all([
+    page.context().waitForEvent('page'),
+    page.getByRole('button', { name: 'Open screen share in a new window' }).click()
+  ]);
+  await expect(popup.getByRole('button', { name: 'Back to meeting' })).toBeVisible();
+  return popup;
+}
+
+test('New window opens the share in an ordinary window and comes back on request', async ({
+  page
+}) => {
+  await joinAndWatch(page, { documentPiP: false, videoPiP: false });
+  const mainTrack = await playing(page, shareVideo);
+  expect(mainTrack).toBeTruthy();
+
+  const popup = await openWindow(page);
+  expect(new URL(popup.url()).pathname).toBe('/share-window.html');
+  await expect.poll(() => playing(popup, 'video.share')).toBe(mainTrack);
+  await expect(popup.getByText(`${presenterName} · Screen`)).toBeVisible();
+  // The page's stylesheets reached the window.
+  await expect
+    .poll(() =>
+      popup.evaluate(
+        () =>
+          getComputedStyle(document.querySelector('.popout')!).backgroundColor !==
+          'rgba(0, 0, 0, 0)'
+      )
+    )
+    .toBe(true);
+  await expect(placeholder(page)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open screen share in a new window' })).toHaveCount(
+    0
+  );
+
+  await Promise.all([
+    popup.waitForEvent('close'),
+    page.getByRole('button', { name: 'Bring it back' }).click()
+  ]);
+  await expect(placeholder(page)).toHaveCount(0);
+
+  // Closed with the window's own control: the stage is restored all the same.
+  const again = await openWindow(page);
+  await again.close();
+  await expect(placeholder(page)).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Open screen share in a new window' })
+  ).toBeVisible();
+});
+
+test('the presenter gets the card, not their own share, in a new window; ending the share closes it', async ({
+  page
+}) => {
+  await joinAndShare(page, { documentPiP: true, videoPiP: true });
+  const screen = await localScreenTrack(page);
+  const popup = await openWindow(page);
+  await expect(popup.getByTestId('presenting-card')).toBeVisible();
+  await expect(popup.locator('video.share')).toHaveCount(0);
+  expect(await playingTracks(popup)).not.toContain(screen);
+
+  // At the smallest picture-in-picture size the card's button clears the cluster.
+  await popup.setViewportSize({ width: 360, height: 263 });
+  const stop = await popup.getByRole('button', { name: 'Stop presenting' }).boundingBox();
+  const cluster = await popup.locator('.cluster').boundingBox();
+  expect(
+    stop && cluster && (stop.y + stop.height <= cluster.y || stop.x + stop.width <= cluster.x)
+  ).toBe(true);
+
+  await Promise.all([popup.waitForEvent('close'), setSharing(page, false)]);
+  await expect(page.getByTestId('focus-pane')).toHaveCount(0);
+});
