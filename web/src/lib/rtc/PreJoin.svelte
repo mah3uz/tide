@@ -234,7 +234,9 @@
 
 <main class="prejoin-shell">
   <header class="topbar">
-    <Wordmark size={18} />
+    <a class="inline-flex min-h-11 items-center rounded-sm no-underline" href="/"
+      ><Wordmark size={18} /></a
+    >
     <div class="topbar-end">
       {@render account?.()}
       <ThemeToggle />

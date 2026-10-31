@@ -353,7 +353,9 @@
 {:else}
   <main class="meeting-state">
     <header class="topbar">
-      <Wordmark size={18} />
+      <a class="inline-flex min-h-11 items-center rounded-sm no-underline" href="/"
+        ><Wordmark size={18} /></a
+      >
       <ThemeToggle />
     </header>
     <div class="orbits" aria-hidden="true"><span></span><span></span><span></span></div>
