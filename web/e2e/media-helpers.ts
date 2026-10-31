@@ -458,13 +458,17 @@ export const resubscribeSettleTimeout = 20_000;
 const mediaPollIntervals = [200, 300, 500];
 
 function expectedMediaElements(snapshot: MediaProbeSnapshot): ProbePublication[] {
-  // A publishing client renders its own camera (and screen share) in its own
-  // tile, so those elements are expected too. Local audio is never rendered —
-  // RemoteAudioRenderer skips the local participant.
+  // A publishing client renders its own camera in its own tile, so that
+  // element is expected too. Its own screen share never plays back to it (a
+  // share of the meeting would show itself without end), and local audio is
+  // never rendered — RemoteAudioRenderer skips the local participant.
   return snapshot.participants.flatMap((participant) =>
     Object.values(participant.publications).filter((publication) =>
       participant.isLocal
-        ? publication.kind === 'video' && !publication.muted && publication.track !== undefined
+        ? publication.kind === 'video' &&
+          publication.source !== 'screen_share' &&
+          !publication.muted &&
+          publication.track !== undefined
         : publication.subscribed &&
           publication.permissionAllowed &&
           publication.track !== undefined &&

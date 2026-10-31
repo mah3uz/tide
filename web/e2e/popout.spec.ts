@@ -8,6 +8,11 @@ import { fakeSfu, fakeSfuLaunchArgs } from './fake-sfu';
 // so each spec installs the API it is about: Document PiP is a stand-in whose
 // requestWindow hands back a real same-origin window from window.open, which
 // is all the app uses of it.
+//
+// Your own share never plays back to you (sharing the meeting's screen would
+// show itself inside itself without end), so the share that plays here is a
+// remote one: a participant announced straight into livekit-client whose
+// screen share is a canvas track handed over as if the SFU had sent it.
 
 test.use({
   launchOptions: {
@@ -53,10 +58,27 @@ async function installMethods(page: Page, methods: Methods): Promise<void> {
 }
 
 type TestRoom = {
-  localParticipant: { setScreenShareEnabled(enabled: boolean): Promise<unknown> };
+  localParticipant: {
+    setScreenShareEnabled(enabled: boolean): Promise<unknown>;
+    getTrackPublication(source: string): { track?: { mediaStreamTrack: MediaStreamTrack } };
+  };
+  handleParticipantUpdates(infos: unknown[]): void;
+  remoteParticipants: Map<
+    string,
+    {
+      addSubscribedMediaTrack(
+        track: MediaStreamTrack,
+        sid: string,
+        stream: MediaStream,
+        receiver: undefined
+      ): unknown;
+    }
+  >;
 };
 
-async function joinAndShare(page: Page, methods: Methods): Promise<void> {
+const presenterName = 'Grace Hopper';
+
+async function join(page: Page, methods: Methods): Promise<void> {
   await installMethods(page, methods);
   await mockApi(page, defaultState());
   await fakeSfu(page, { metadata: '{"role":"host"}' });
@@ -65,7 +87,63 @@ async function joinAndShare(page: Page, methods: Methods): Promise<void> {
   await expect(page.getByRole('navigation', { name: 'Meeting controls' })).toBeVisible({
     timeout: 20_000
   });
+}
+
+/** Someone else shares their screen, and it plays on the stage. */
+async function joinAndWatch(page: Page, methods: Methods): Promise<void> {
+  await join(page, methods);
+  await page.evaluate((name) => {
+    const room = (window as unknown as { __tideRoom: TestRoom }).__tideRoom;
+    room.handleParticipantUpdates([
+      {
+        sid: 'PA_grace',
+        identity: 'grace',
+        name,
+        state: 2,
+        metadata: '',
+        attributes: {},
+        kind: 0,
+        version: 1,
+        joinedAt: 0n,
+        dataTracks: [],
+        permission: { canSubscribe: true, canPublish: true, canPublishData: true },
+        tracks: [{ sid: 'TR_grace_screen', type: 1, source: 3, name: 'screen', codecs: [] }]
+      }
+    ]);
+    const canvas = Object.assign(document.createElement('canvas'), { width: 320, height: 180 });
+    const context = canvas.getContext('2d')!;
+    setInterval(() => context.fillRect(0, 0, Math.random() * 320, 180), 100);
+    const stream = canvas.captureStream(10);
+    room.remoteParticipants
+      .get('grace')!
+      .addSubscribedMediaTrack(stream.getVideoTracks()[0], 'TR_grace_screen', stream, undefined);
+  }, presenterName);
+  await expect(page.getByTestId('focus-pane').locator('video')).toBeVisible();
+}
+
+/** You share your screen. */
+async function joinAndShare(page: Page, methods: Methods): Promise<void> {
+  await join(page, methods);
   await setSharing(page, true);
+}
+
+/** The ids of every video track playing in a page. */
+function playingTracks(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('video')].flatMap((video) =>
+      ((video.srcObject as MediaStream | null)?.getVideoTracks?.() ?? []).map((track) => track.id)
+    )
+  );
+}
+
+/** The id of the screen track you are publishing. */
+function localScreenTrack(page: Page): Promise<string | undefined> {
+  return page.evaluate(
+    () =>
+      (
+        window as unknown as { __tideRoom: TestRoom }
+      ).__tideRoom.localParticipant.getTrackPublication('screen_share')?.track?.mediaStreamTrack.id
+  );
 }
 
 async function setSharing(page: Page, enabled: boolean): Promise<void> {
@@ -105,25 +183,24 @@ const shareVideo = '[data-testid="focus-pane"] video';
 
 test('Pop out is offered only where the browser has a way to pop a share out', async ({ page }) => {
   // Firefox today: neither API, so a button would do nothing.
-  await joinAndShare(page, { documentPiP: false, videoPiP: false });
-  await expect(page.getByTestId('focus-pane').locator('video')).toBeVisible();
+  await joinAndWatch(page, { documentPiP: false, videoPiP: false });
   await expect(page.getByRole('button', { name: 'Pop out screen share' })).toHaveCount(0);
 });
 
 test('without Document PiP the share video itself goes into picture-in-picture', async ({
   page
 }) => {
-  await joinAndShare(page, { documentPiP: false, videoPiP: true });
+  await joinAndWatch(page, { documentPiP: false, videoPiP: true });
   await page.getByRole('button', { name: 'Pop out screen share' }).click();
   await expect
     .poll(() => page.evaluate(() => (window as Window & { __pipVideo?: string }).__pipVideo))
-    .toBe("Ada Host's screen share");
+    .toBe(`${presenterName}'s screen share`);
   // The browser draws its own placeholder over the video; the page adds none.
   await expect(placeholder(page)).toHaveCount(0);
 });
 
 test('a popped-out share plays in its own window and comes back on request', async ({ page }) => {
-  await joinAndShare(page, { documentPiP: true, videoPiP: true });
+  await joinAndWatch(page, { documentPiP: true, videoPiP: true });
   const mainTrack = await playing(page, shareVideo);
   expect(mainTrack).toBeTruthy();
 
@@ -132,7 +209,7 @@ test('a popped-out share plays in its own window and comes back on request', asy
   // its video attached underneath, so nothing is re-subscribed.
   await expect.poll(() => playing(popup, 'video.share')).toBe(mainTrack);
   expect(await playing(page, shareVideo)).toBe(mainTrack);
-  await expect(popup.getByText('Ada Host · Screen')).toBeVisible();
+  await expect(popup.getByText(`${presenterName} · Screen`)).toBeVisible();
   await expect(placeholder(page)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pop out screen share' })).toHaveCount(0);
 
@@ -185,4 +262,42 @@ test('the window closes when you leave the meeting', async ({ page }) => {
     popup.waitForEvent('close'),
     page.getByRole('button', { name: 'Leave room' }).click()
   ]);
+});
+
+test('your own share is never played back to you, on the stage or in the window', async ({
+  page
+}) => {
+  await joinAndShare(page, { documentPiP: true, videoPiP: true });
+  const screen = await localScreenTrack(page);
+  expect(screen).toBeTruthy();
+
+  const focus = page.getByTestId('focus-pane');
+  await expect(focus.getByTestId('presenting-card')).toContainText("You're presenting");
+  await expect(focus.locator('video')).toHaveCount(0);
+  expect(await playingTracks(page)).not.toContain(screen);
+
+  // The window is how a presenter keeps the room in view; it shows the card too.
+  const popup = await popOut(page);
+  await expect(popup.getByTestId('presenting-card')).toBeVisible();
+  await expect(popup.locator('video.share')).toHaveCount(0);
+  expect(await playingTracks(popup)).not.toContain(screen);
+
+  // Stop presenting ends the share, and the window goes with it.
+  await Promise.all([
+    popup.waitForEvent('close'),
+    popup.getByRole('button', { name: 'Stop presenting' }).click()
+  ]);
+  await expect(focus).toHaveCount(0);
+  await expect.poll(() => localScreenTrack(page)).toBeUndefined();
+});
+
+test('your own share offers no video picture-in-picture, which would play it back', async ({
+  page
+}) => {
+  await joinAndShare(page, { documentPiP: false, videoPiP: true });
+  await expect(page.getByTestId('presenting-card')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pop out screen share' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Stop presenting' }).click();
+  await expect(page.getByTestId('focus-pane')).toHaveCount(0);
 });

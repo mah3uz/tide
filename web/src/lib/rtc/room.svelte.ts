@@ -10,7 +10,8 @@ import {
   type Participant,
   type RemoteParticipant,
   type RemoteTrackPublication,
-  type RoomEventCallbacks
+  type RoomEventCallbacks,
+  type ScreenShareCaptureOptions
 } from 'livekit-client';
 import {
   playNewMessageSound,
@@ -88,6 +89,12 @@ export const maximumChatLength = 2000;
 const participantExitSoundDelay = 100;
 const maximumLedgerEntries = 500;
 const maximumHandlerFaults = 50;
+// The meeting's own tab is left out of the picker: sharing it shows the share inside itself.
+const screenCapture: ScreenShareCaptureOptions = {
+  selfBrowserSurface: 'exclude',
+  surfaceSwitching: 'include',
+  contentHint: 'detail'
+};
 
 // The floor under every dropped event, including the ones neither we nor
 // LiveKit have thought of. Slow enough to be free on an idle meeting (the
@@ -580,7 +587,7 @@ export class RoomState {
         ? participant.setMicrophoneEnabled(enabled)
         : medium === 'camera'
           ? participant.setCameraEnabled(enabled)
-          : participant.setScreenShareEnabled(enabled));
+          : participant.setScreenShareEnabled(enabled, enabled ? screenCapture : undefined));
       // Resolving is not success: LiveKit resolves with nothing when it gave
       // up waiting on a pending publication. Only a medium that is now what
       // was asked for has fixed its problem.

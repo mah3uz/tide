@@ -12,6 +12,7 @@
   import ParticipantPanel from '#lib/ui/ParticipantPanel.svelte';
   import ThemeToggle from '#lib/ui/ThemeToggle.svelte';
   import WallClock from '#lib/ui/WallClock.svelte';
+  import PresentingCard from './PresentingCard.svelte';
   import StageTile from './StageTile.svelte';
   import RemoteAudioRenderer from './RemoteAudioRenderer.svelte';
   import { ConnectionState } from 'livekit-client';
@@ -323,17 +324,21 @@
     {#if focusParticipant?.screenShare && layout.share}
       <article class="focus-pane" data-testid="focus-pane" style={place(layout.share)}>
         <div class="share-screen">
-          {#key focusParticipant.screenShare.publicationSid}
-            <!-- Live screen share does not have a caption track. -->
-            <video
-              bind:this={shareVideo}
-              use:attachMediaTrack={focusParticipant.screenShare}
-              autoplay
-              playsinline
-              muted
-              aria-label={`${focusParticipant.name}'s screen share`}
-            ></video>
-          {/key}
+          {#if focusParticipant.isLocal}
+            <PresentingCard {rtc} />
+          {:else}
+            {#key focusParticipant.screenShare.publicationSid}
+              <!-- Live screen share does not have a caption track. -->
+              <video
+                bind:this={shareVideo}
+                use:attachMediaTrack={focusParticipant.screenShare}
+                autoplay
+                playsinline
+                muted
+                aria-label={`${focusParticipant.name}'s screen share`}
+              ></video>
+            {/key}
+          {/if}
           {#if poppedOut}
             <div class="popped-out">
               <p>Screen share is in its own window</p>
@@ -344,12 +349,15 @@
             </div>
           {/if}
         </div>
-        <span class="focus-label">
-          <Screencast size={16} weight="regular" aria-hidden="true" />
-          <span class="focus-name">{focusParticipant.name} · Screen</span>
-        </span>
+        {#if !focusParticipant.isLocal}
+          <span class="focus-label">
+            <Screencast size={16} weight="regular" aria-hidden="true" />
+            <span class="focus-name">{focusParticipant.name} · Screen</span>
+          </span>
+        {/if}
         <div class="share-actions" data-slot="share-actions">
-          {#if popout && !poppedOut}
+          <!-- Your own share has no video to lift, only the window of the room. -->
+          {#if popout && !poppedOut && (popout === 'document' || !focusParticipant.isLocal)}
             <button
               type="button"
               class="share-pill"

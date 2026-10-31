@@ -10,6 +10,7 @@
   import { initials, participantColor } from '#lib/ui/participantColor.js';
   import type { ParticipantView } from './media';
   import { attachMediaTrack } from './mediaElement';
+  import PresentingCard from './PresentingCard.svelte';
   import type { RoomState } from './room.svelte';
 
   // Lives in its own window (Document Picture-in-Picture): no window-level
@@ -65,7 +66,9 @@
 
   <div class="stage">
     <div class="frame" class:fitted={shareAspect !== undefined} style:--share-aspect={shareAspect}>
-      {#if presenter?.screenShare}
+      {#if presenter?.isLocal}
+        <PresentingCard {rtc} />
+      {:else if presenter?.screenShare}
         {#key presenter.screenShare.publicationSid}
           <!-- Live screen share does not have a caption track. -->
           <video
@@ -256,6 +259,11 @@
     height: 100%;
     min-height: 0;
     object-fit: contain;
+  }
+
+  /* Clear of the cluster, so a small window never puts it over Stop presenting. */
+  .frame :global(.presenting) {
+    padding-bottom: 76px;
   }
 
   .cluster {
