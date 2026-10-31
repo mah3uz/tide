@@ -73,6 +73,7 @@
   let endBusy = $state(false);
   let endError = $state('');
   let deviceMenu = $state<DeviceMenuKind | ''>('');
+  const deviceTriggers: { [kind in DeviceMenuKind]?: HTMLButtonElement } = {};
 
   $effect(() => {
     if (!phone.current) moreOpen = false;
@@ -111,10 +112,75 @@
     leaveConfirm = open;
   }
 
-  function pickDevice(kind: DeviceMenuKind, deviceId: string): void {
+  function closeDeviceMenu(kind: DeviceMenuKind): void {
     deviceMenu = '';
+    deviceTriggers[kind]?.focus();
+  }
+
+  function pickDevice(kind: DeviceMenuKind, deviceId: string): void {
+    closeDeviceMenu(kind);
     // The media controls report their own failures as rtc.mediaError.
     void rtc.switchDevice(kind, deviceId);
+  }
+
+  // WAI-ARIA menu pattern: opening moves focus to the checked device, arrows
+  // and Home/End move between devices, Escape returns to the caret, and Tab
+  // leaves the menu closed. The More sheet's lists are always open, so they
+  // keep only the arrows and leave Escape and Tab to the sheet.
+  function focusCheckedDevice(menu: HTMLElement): void {
+    const items = menuItems(menu);
+    (
+      items.find((item) => item.getAttribute('aria-checked') === 'true') ??
+      items[0] ??
+      menu
+    ).focus();
+  }
+
+  // The sheet's lists are reached with Tab: the checked device, or the first,
+  // is their one tab stop.
+  function sheetTabStop(kind: DeviceMenuKind, index: number): boolean {
+    const checked = rtc.devices[kind].findIndex(
+      (device) => device.deviceId === rtc.activeDeviceIds[kind]
+    );
+    return index === Math.max(checked, 0);
+  }
+
+  function menuItems(menu: HTMLElement): HTMLElement[] {
+    return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitemradio"]'));
+  }
+
+  function deviceMenuKeydown(kind: DeviceMenuKind, inline: boolean, event: KeyboardEvent): void {
+    const menu = event.currentTarget as HTMLElement;
+    const items = menuItems(menu);
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    let next = -1;
+    switch (event.key) {
+      case 'ArrowDown':
+        next = (current + 1) % items.length;
+        break;
+      case 'ArrowUp':
+        next = current <= 0 ? items.length - 1 : current - 1;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = items.length - 1;
+        break;
+      case 'Escape':
+        if (inline) return;
+        event.preventDefault();
+        event.stopPropagation();
+        closeDeviceMenu(kind);
+        return;
+      case 'Tab':
+        if (!inline) deviceMenu = '';
+        return;
+      default:
+        return;
+    }
+    event.preventDefault();
+    items[next]?.focus();
   }
 
   async function leave(): Promise<void> {
@@ -177,20 +243,26 @@
 
 {#snippet deviceMenuList(kind: DeviceMenuKind, fallbackLabel: string, inline: boolean)}
   <!-- The stopPropagation shield keeps the window click-away handler from
-       closing the menu; keyboard interaction lives on the options. -->
-  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
+       closing the menu; the options are the click targets. -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="device-menu"
     class:inline
     role="menu"
+    tabindex="-1"
     aria-label={`Choose ${fallbackLabel.toLowerCase()}`}
     onclick={(event) => event.stopPropagation()}
+    onkeydown={(event) => deviceMenuKeydown(kind, inline, event)}
+    {@attach (menu) => {
+      if (!inline) focusCheckedDevice(menu);
+    }}
   >
     {#each rtc.devices[kind] as device, index (device.deviceId)}
       <button
         type="button"
         class="device-option"
         role="menuitemradio"
+        tabindex={inline && sheetTabStop(kind, index) ? 0 : -1}
         aria-checked={rtc.activeDeviceIds[kind] === device.deviceId}
         onclick={() => pickDevice(kind, device.deviceId)}
       >
@@ -211,14 +283,14 @@
     class="round well share-control"
     class:labelled
     class:active={rtc.screenShareEnabled}
-    aria-label={rtc.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
+    aria-label="Share screen"
     aria-pressed={rtc.screenShareEnabled}
     aria-busy={rtc.mediaBusy.screen}
     title={rtc.screenShareEnabled ? 'Stop sharing' : 'Share screen'}
     onclick={() => void rtc.toggleScreenShare()}
   >
     <Screencast size={20} weight="regular" aria-hidden="true" />
-    {#if labelled}<span>{rtc.screenShareEnabled ? 'Stop sharing' : 'Share screen'}</span>{/if}
+    {#if labelled}<span>Share screen</span>{/if}
   </button>
 {/snippet}
 
@@ -239,7 +311,6 @@
         : recordingConfirm
           ? 'Record?'
           : 'Start recording'}
-      aria-pressed={rtc.isRecording}
       title={rtc.isRecording ? 'Stop recording' : 'Start recording'}
       onclick={() => void toggleRecording()}
     >
@@ -273,17 +344,18 @@
     type="button"
     class="round view-control"
     class:labelled
-    aria-label={view === 'grid' ? 'Speaker view' : 'Grid view'}
+    class:active={labelled && view === 'speaker'}
+    aria-label="Speaker view"
     aria-pressed={view === 'speaker'}
     title={view === 'grid' ? 'Speaker view' : 'Grid view'}
     onclick={ontoggleview}
   >
-    {#if view === 'grid'}
+    {#if view === 'grid' || labelled}
       <UserRectangle size={20} weight="regular" aria-hidden="true" />
     {:else}
       <GridFour size={20} weight="regular" aria-hidden="true" />
     {/if}
-    {#if labelled}<span>{view === 'grid' ? 'Speaker view' : 'Grid view'}</span>{/if}
+    {#if labelled}<span>Speaker view</span>{/if}
   </button>
 {/snippet}
 
@@ -294,12 +366,16 @@
   }}
 />
 
+<!-- Toggles keep a fixed name and carry their state in aria-pressed, so a
+     screen reader hears "Microphone, pressed" while the mic is on. The
+     tooltips name the action for sighted users. Record is an action with a
+     confirm step, not a toggle: its name changes and it has no aria-pressed. -->
 <nav class="capsule" aria-label="Meeting controls" inert={phone.current && moreOpen}>
   <div class="split" class:primary={rtc.micEnabled} class:off={!rtc.micEnabled}>
     <button
       type="button"
       class="round"
-      aria-label={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+      aria-label="Microphone"
       aria-pressed={rtc.micEnabled}
       aria-busy={rtc.mediaBusy.microphone}
       title={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
@@ -315,6 +391,7 @@
       <button
         type="button"
         class="caret"
+        bind:this={deviceTriggers.audioinput}
         aria-label="Choose microphone"
         aria-haspopup="menu"
         aria-expanded={deviceMenu === 'audioinput'}
@@ -336,7 +413,7 @@
     <button
       type="button"
       class="round"
-      aria-label={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
+      aria-label="Camera"
       aria-pressed={rtc.camEnabled}
       aria-busy={rtc.mediaBusy.camera}
       title={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
@@ -352,6 +429,7 @@
       <button
         type="button"
         class="caret"
+        bind:this={deviceTriggers.videoinput}
         aria-label="Choose camera"
         aria-haspopup="menu"
         aria-expanded={deviceMenu === 'videoinput'}
@@ -380,7 +458,7 @@
     type="button"
     class="round"
     class:active={peopleOpen}
-    aria-label={peopleOpen ? 'Close people' : 'Open people'}
+    aria-label="People"
     aria-pressed={peopleOpen}
     title={peopleOpen ? 'Close people' : 'Open people'}
     onclick={ontogglepeople}
@@ -393,7 +471,7 @@
     type="button"
     class="round"
     class:active={chatOpen}
-    aria-label={chatOpen ? 'Close chat' : 'Open chat'}
+    aria-label="Chat"
     aria-pressed={chatOpen}
     title={chatOpen ? 'Close chat' : 'Open chat'}
     onclick={ontogglechat}

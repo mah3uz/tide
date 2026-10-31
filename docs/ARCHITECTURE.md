@@ -266,7 +266,7 @@ on the server, and capabilities still travel only in tokens tide mints.
   sized by `TIDE_JOIN_RATE_LIMIT` (§15), since it no longer takes an account,
   and in total: with 10,000 rooms in memory, creating another answers 503
   ("This server has too many rooms. Try again later.") until the sweep frees
-  some. Many addresses are cheap (an IPv6 /48 is 65,536 of the /64s the
+  some. Many addresses are cheap (an IPv6 /48 is 256 of the /56s the
   limits count), so only a ceiling bounds memory.
 - **No recording, transcripts or machines.** Those routes answer 404 and
   `/api/me` reports `anonymous: true, recording: false, transcripts: false`.
@@ -338,6 +338,9 @@ guest                          tide server                       host
 - Owner joining their own room: token immediately, no lobby.
 - `lobby_enabled=false`: guests also get a token immediately.
 - Deny sends `event: denied`; guest request rows expire after 10 minutes.
+- A room's lobby holds at most 50 waiting guests; the next join answers 429
+  ("This lobby is full. Try again in a few minutes."). Join limits count per
+  client and addresses are cheap, so only this ceiling bounds the queue.
 - Reconnecting guests re-enter through the lobby only if their LiveKit session
   fully dropped (LiveKit resume covers blips without a new token).
 
@@ -860,7 +863,9 @@ embedded (node IP discovered), recording off`.
 
 `TIDE_DEV_MODE=true` supplies the publicly-known dev value for any secret
 left unset, and exposes `/api/dev/token`. It turns nothing else on: the dev
-stack (§13) sets `TIDE_OIDC_ISSUER` and `TIDE_S3_ENDPOINT` itself.
+stack (§13) sets `TIDE_OIDC_ISSUER` and `TIDE_S3_ENDPOINT` itself. It refuses
+a `TIDE_BASE_URL` that may be public: the host must be localhost, a loopback,
+private or link-local address, or a one-label name like a Compose service.
 
 `TIDE_TRANSCRIPTS` turns on transcripts and machine pairing (§8.1). Like
 `TIDE_DEV_MODE` it is read with `strconv.ParseBool`, and a value it can't
@@ -868,7 +873,7 @@ parse means the default, off; tide logs at startup whether transcripts are
 on.
 
 The four rate limits are per-client ceilings over a one-minute window, an IPv6
-client counting by its /64. `TIDE_JOIN_RATE_LIMIT` also sizes the separate
+client counting by its /56. `TIDE_JOIN_RATE_LIMIT` also sizes the separate
 bucket for room lookups (§15), which a meeting page uses once per load. They are configuration because the right value
 depends on the deployment: a public install wants the defaults, while the media
 gate — where every browser shares one container IP — would throttle itself
@@ -956,13 +961,29 @@ Forgejo Actions (`.forgejo/workflows/ci.yml`), on every push/PR:
 2. **web** — `svelte-check`, prettier check, `vite build`, and the browser
    specs that run against the mock API and fake SFU alone (no server)
 3. **typesync** — `make gen && git diff --exit-code` (§11)
-4. **media-e2e** — the full real-SFU gate (below), against the sealed stack
-5. **build** — full binary build (SPA embed included) as the merge gate
+4. **site** — the documentation site in `site/`: `npm run check`, prettier
+   check, prerendered build
+5. **media-e2e** — the full real-SFU gate (below), against the sealed stack
+6. **build** — full binary build (SPA embed included) as the merge gate
+
+GitHub Actions runs the same gate (`.github/workflows/ci.yml`). A pushed `v*`
+tag runs `.github/workflows/release.yml`, which publishes the linux/amd64 and
+linux/arm64 image to `ghcr.io/convex-works/tide` and creates the GitHub
+release from `docs/releases/<tag>.md`, with the static binaries
+(`tide-linux-amd64`, `tide-linux-arm64`) and their `SHA256SUMS` attached. A
+release tag fails unless the install docs and manifests already pin its
+version (`scripts/check-release-pins.sh`). GitHub makes a newly pushed container
+package private: after the first release push, set Convex-Works → Packages →
+tide → Package settings → visibility to Public, and check that
+`docker pull ghcr.io/convex-works/tide:<version>` works logged out.
 
 The media gate runs in full on every pull request; nothing is deferred to a
 nightly job, because a regression only a nightly catches has already shipped.
 It covers, in order: the lifecycle scenarios, recording, the reliability suite
 (chromium + webkit), the seeded fuzzer, and a rerun under `netem` loss/latency.
+The lifecycle scenarios run on chromium only: Playwright's Linux WebKit
+deadlocks in its GStreamer media backend under them (issue #55), a code path
+Safari does not have.
 
 **The rule the lifecycle suite encodes.** Assertions must prove *presence*
 before they prove flow. `expectMediaInvariant` only checks that whatever a
@@ -1011,7 +1032,7 @@ up between runs for iteration.
   `POST /moil/v1/pair`, the one moil endpoint without credentials that creates
   state, which must be JSON so a web page can't post one without a CORS
   preflight; anything else is refused before it counts); stale buckets are
-  cleaned in memory. IPv6 clients are counted by their /64.
+  cleaned in memory. IPv6 clients are counted by their /56.
 - Anonymous mode (§4.1): anyone can mint a session, so nothing may be counted
   per anonymous `sub`. Room creation is limited per client address (10/min,
   sized by the join limit), room lookups count anonymous sessions per client
@@ -1035,7 +1056,7 @@ up between runs for iteration.
   authenticating proves nothing). The reference deployments keep it off every
   network:
   in Kubernetes it runs in tide's pod bound to 127.0.0.1, in Compose on the
-  project's private network with no published port. It is a separate,
+  host's network bound to the host's loopback only. It is a separate,
   ordinary Redis, so nothing a client sends it can take tide down.
 - With no recorder, the media server's API key and secret are generated per
   start and never leave the process.
@@ -1045,7 +1066,13 @@ up between runs for iteration.
   attack, and the lobby (on by default) still stands between a guesser and
   the meeting. Owners who want more can set a longer slug.
 - JSON request bodies are limited to 1 MB before decoding; lobby requests
-  expire after 10 minutes.
+  expire after 10 minutes, and a room holds at most 50 at once (§6).
+- Every response carries a Content-Security-Policy (`default-src 'self'`,
+  scripts by hash, `frame-ancestors 'none'`, `base-uri 'none'`,
+  `form-action 'self'`), `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin` and
+  `X-Frame-Options: DENY`; with an https base URL, also
+  `Strict-Transport-Security: max-age=31536000`.
 - Presigned download URLs are short-lived (5 min) and minted per request after
   an ownership check.
 - Machines (§8.1): pairing is confirmed only by a signed-in session with the
@@ -1072,6 +1099,13 @@ up between runs for iteration.
   never transmitted anywhere; treat an exported file as personal data.
 - CSP, clickjacking, MIME-sniffing, and referrer-policy headers wrap every
   response; the SPA makes no third-party requests (fonts are self-hosted).
+  Scripts come only from tide's origin, plus SvelteKit's inline bootstrap,
+  allowed by its sha256, which tide computes from the embedded shell at
+  startup (no `'unsafe-inline'`). Pages connect only to tide's origin and the
+  media server's public signaling origin (`TIDE_MEDIA_PUBLIC_URL`, or the
+  base URL's when embedded), named explicitly as `ws(s)://` and `http(s)://`.
+  The recorder's page (`/egress-template`) alone may open a WebSocket to any
+  host: the recorder gives it a media server address tide never sees.
 
 ## 16. Phased build
 

@@ -61,15 +61,15 @@ test('a host has microphone and camera side by side, and record after screen sha
   await enter(page);
 
   expect(await controlLabels(page)).toEqual([
-    'Unmute microphone',
+    'Microphone',
     'Choose microphone',
-    'Turn camera on',
+    'Camera',
     'Choose camera',
     'Share screen',
     'Start recording',
-    'Grid view',
-    'Open people',
-    'Open chat',
+    'Speaker view',
+    'People',
+    'Chat',
     'Leave or end meeting'
   ]);
 
@@ -88,16 +88,60 @@ test('a guest has microphone and camera in the same place as a host, and no reco
   await enter(page, 'Grace Guest');
 
   expect(await controlLabels(page)).toEqual([
-    'Unmute microphone',
+    'Microphone',
     'Choose microphone',
-    'Turn camera on',
+    'Camera',
     'Choose camera',
     'Share screen',
-    'Grid view',
-    'Open people',
-    'Open chat',
+    'Speaker view',
+    'People',
+    'Chat',
     'Leave room'
   ]);
+});
+
+test('toggles keep their names and say their state with aria-pressed', async ({ page }) => {
+  await mockApi(page, state());
+  await fakeSfu(page);
+  await enter(page);
+  const bar = page.getByRole('navigation', { name: 'Meeting controls' });
+
+  // Orbit, the speaker view, is where a meeting starts.
+  const view = bar.getByRole('button', { name: 'Speaker view', exact: true });
+  await expect(view).toHaveAttribute('aria-pressed', 'true');
+  await view.click();
+  await expect(view).toHaveAttribute('aria-pressed', 'false');
+  await view.click();
+  await expect(view).toHaveAttribute('aria-pressed', 'true');
+  for (const name of ['People', 'Chat']) {
+    const toggle = bar.getByRole('button', { name, exact: true });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  }
+  // Microphone and camera were turned off at pre-join.
+  await expect(bar.getByRole('button', { name: 'Microphone', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  );
+  await expect(bar.getByRole('button', { name: 'Camera', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  );
+});
+
+test('a guest knocking is announced to the host politely', async ({ page }) => {
+  await mockApi(page, {
+    ...state(),
+    lobbyPending: [{ id: 'knock-1', name: 'Grace Guest', requested_at: 0 }]
+  });
+  await fakeSfu(page);
+  await enter(page);
+  await expect(page.locator('[aria-live="polite"]', { hasText: 'is waiting' })).toHaveText(
+    'Grace Guest is waiting in the lobby'
+  );
 });
 
 test('a long name stays on one line and keeps "(You)" inside a phone-width tile', async ({
@@ -216,8 +260,8 @@ test('the stage names the room, and its details give the meeting link to copy', 
 const phone = { width: 320, height: 640 };
 
 const sheets = [
-  { name: 'People', open: 'Open people', close: 'Close people', other: 'Open chat' },
-  { name: 'Chat', open: 'Open chat', close: 'Close chat', other: 'Open people' }
+  { name: 'People', other: 'Chat' },
+  { name: 'Chat', other: 'People' }
 ] as const;
 
 /** Fails unless the element is drawn wholly inside the viewport, `slack` px in from the sides. */
@@ -305,9 +349,9 @@ test('on a phone the header keeps every chip on screen and clears the panels', a
 
   // On a phone an open panel is a bottom sheet: it rises from the bottom edge,
   // full width, and leaves the top of the screen showing above it.
-  for (const { name, open } of sheets) {
+  for (const { name } of sheets) {
     const sheet = page.getByRole('complementary', { name });
-    await page.getByRole('button', { name: open }).click();
+    await page.getByRole('button', { name, exact: true }).click();
     await settled(sheet);
     const panel = (await sheet.boundingBox())!;
     expect(panel.x, name).toBe(0);
@@ -317,7 +361,7 @@ test('on a phone the header keeps every chip on screen and clears the panels', a
     // Its close button, and a tap on the dimmed stage, put it away again.
     await sheet.getByRole('button', { name: /^Close/ }).click();
     await expect(sheet, name).toBeHidden();
-    await page.getByRole('button', { name: open }).click();
+    await page.getByRole('button', { name, exact: true }).click();
     await expect(sheet, name).toBeVisible();
     await page.mouse.click(phone.width / 2, 40);
     await expect(sheet, name).toBeHidden();
@@ -336,10 +380,10 @@ test('on a phone the capsule keeps the everyday controls and More holds the rest
   // Six round controls across the width; record, the view and the device
   // lists are one tap further, in More.
   expect(await controlLabels(page)).toEqual([
-    'Unmute microphone',
-    'Turn camera on',
-    'Open people',
-    'Open chat',
+    'Microphone',
+    'Camera',
+    'People',
+    'Chat',
     'More controls',
     'Leave or end meeting'
   ]);
@@ -431,11 +475,11 @@ test('from 900px the stage and capsule make room for an open sheet, never under 
 
   // The host's full capsule is wider than the room a small laptop leaves
   // beside the sheet; it tightens, then drops to the everyday controls.
-  for (const { name, open, close, other } of sheets) {
+  for (const { name, other } of sheets) {
     const sheet = page.getByRole('complementary', { name });
     for (const width of [900, 1000, 1100, 1180]) {
       await page.setViewportSize({ width, height: 800 });
-      if (!(await sheet.count())) await page.getByRole('button', { name: open }).click();
+      if (!(await sheet.count())) await page.getByRole('button', { name, exact: true }).click();
       await settled(sheet);
       await settled(bar.locator('..'));
       const capsule = (await bar.boundingBox())!;
@@ -449,12 +493,12 @@ test('from 900px the stage and capsule make room for an open sheet, never under 
       expect(stage.x + stage.width, where).toBeLessThanOrEqual(panel.x);
       await expect(page.locator('.scrim'), where).toBeHidden();
       // Microphone, camera, people, chat and leave are always there.
-      for (const label of ['Unmute microphone', 'Turn camera on', close, other]) {
+      for (const label of ['Microphone', 'Camera', name, other]) {
         await expect(bar.getByRole('button', { name: label, exact: true }), where).toBeVisible();
       }
       await expect(bar.getByRole('button', { name: 'Leave or end meeting' }), where).toBeVisible();
     }
-    await bar.getByRole('button', { name: close }).click();
+    await bar.getByRole('button', { name, exact: true }).click();
     await expect(sheet).toBeHidden();
   }
 });
@@ -472,9 +516,9 @@ test('below 900px an open sheet lies over the stage instead of squeezing it', as
   const stageAlone = (await media.boundingBox())!;
   const capsuleAlone = (await bar.boundingBox())!;
 
-  for (const { name, open } of sheets) {
+  for (const { name } of sheets) {
     const sheet = page.getByRole('complementary', { name });
-    await page.getByRole('button', { name: open }).click();
+    await page.getByRole('button', { name, exact: true }).click();
     await settled(sheet);
     await settled(bar.locator('..'));
 
@@ -496,7 +540,7 @@ test('below 900px an open sheet lies over the stage instead of squeezing it', as
 
     // Escape puts it away too: with the capsule covered, it is the keyboard's
     // way out besides the sheet's own close button.
-    await page.getByRole('button', { name: open }).click();
+    await page.getByRole('button', { name, exact: true }).click();
     await expect(sheet).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(sheet, name).toBeHidden();
@@ -508,7 +552,7 @@ test('Escape closes a menu over an open sheet first, and keeps a chat draft', as
   await fakeSfu(page);
   await enter(page);
   const chat = page.getByRole('complementary', { name: 'Chat' });
-  await page.getByRole('button', { name: 'Open chat' }).click();
+  await page.getByRole('button', { name: 'Chat', exact: true }).click();
 
   // One Escape, one layer: the device menu goes, the sheet stays.
   await page.getByRole('button', { name: 'Choose microphone' }).click();
@@ -595,21 +639,21 @@ test('a sheet takes the keyboard as it opens and hands it back to its control', 
 
   // Without this a keyboard or screen-reader user opens a sheet and is left
   // on the capsule, then lands on the page's start when it closes.
-  await page.getByRole('button', { name: 'Open chat' }).focus();
+  await page.getByRole('button', { name: 'Chat', exact: true }).focus();
   await page.keyboard.press('Enter');
   const chat = page.getByRole('complementary', { name: 'Chat' });
   await expect(chat.getByRole('textbox', { name: 'Chat message' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(chat).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Open chat' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Chat', exact: true })).toBeFocused();
 
-  await page.getByRole('button', { name: 'Open people' }).focus();
+  await page.getByRole('button', { name: 'People', exact: true }).focus();
   await page.keyboard.press('Enter');
   const people = page.getByRole('complementary', { name: 'People' });
   await expect(people.getByRole('heading', { name: 'People' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(people).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Open people' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'People', exact: true })).toBeFocused();
 });
 
 test('on a phone the stage behind a sheet is out of reach until it closes', async ({ page }) => {
@@ -622,7 +666,7 @@ test('on a phone the stage behind a sheet is out of reach until it closes', asyn
 
   // The scrim makes a sheet look modal; inert makes it so for the keyboard
   // and screen readers, which would otherwise wander through the call behind.
-  await page.getByRole('button', { name: 'Open chat' }).click();
+  await page.getByRole('button', { name: 'Chat', exact: true }).click();
   const chat = page.getByRole('complementary', { name: 'Chat' });
   await expect(chat).toBeVisible();
   for (const selector of ['.stage-header', '.media-layout', '.capsule']) {

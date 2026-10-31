@@ -16,7 +16,7 @@ jobs:
           cache: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Server vet
         working-directory: server
         run: go vet ./...
@@ -35,6 +35,13 @@ jobs:
       - name: Build SPA
         working-directory: web
         run: npx vite build
+      - name: Prove the shell's inline scripts are hashed into the CSP
+        # The policy allows SvelteKit's inline bootstrap by hash, not
+        # 'unsafe-inline'; this checks the shell just built still fits.
+        working-directory: server
+        env:
+          TIDE_REQUIRE_WEB_BUILD: "1"
+        run: go test ./internal/httpapi -run TestBuiltShellInlineScripts -count=1
       - name: Prove test hooks are absent
         working-directory: web
         run: |
@@ -59,6 +66,26 @@ jobs:
         run: make gen
       - name: Check generated type drift
         run: git diff --exit-code -- web/src/lib/api/types.gen.ts
+
+  site:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+      - name: Site checks
+        working-directory: site
+        run: npm run check
+      - name: Site formatting
+        working-directory: site
+        run: npm run lint
+      - name: Build site
+        working-directory: site
+        run: npm run build
 
   media-e2e:
     runs-on: docker
@@ -96,7 +123,7 @@ jobs:
           cache: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Install web dependencies
         working-directory: web
         run: npm ci

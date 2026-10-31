@@ -269,7 +269,7 @@
         class:off={!camEnabled}
         class="round-toggle preview-toggle"
         type="button"
-        aria-label={camEnabled ? 'Turn camera off' : 'Turn camera on'}
+        aria-label="Camera"
         aria-pressed={camEnabled}
         title={camEnabled ? 'Turn camera off' : 'Turn camera on'}
         onclick={() => void toggleCamera()}
@@ -336,7 +336,7 @@
           class:off={!micEnabled}
           class="round-toggle mic-toggle"
           type="button"
-          aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+          aria-label="Microphone"
           aria-pressed={micEnabled}
           title={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
           onclick={() => void toggleMicrophone()}

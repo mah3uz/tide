@@ -122,7 +122,7 @@ for (const theme of ['light', 'dark'] as const) {
       await chat(page, 'tom', 'Yes, loud and clear.\nNotes for later.');
       await shot(page, `${size}-${theme}-orbit`);
 
-      const grid = page.getByRole('button', { name: 'Grid view' });
+      const grid = page.getByRole('button', { name: 'Speaker view', exact: true, pressed: true });
       const more = page.getByRole('button', { name: 'More controls' });
       if (size === 'phone' && (await more.count())) {
         await more.click();
@@ -133,11 +133,13 @@ for (const theme of ['light', 'dark'] as const) {
       if (await grid.count()) {
         await grid.click();
         await shot(page, `${size}-${theme}-grid`);
-        await page.getByRole('button', { name: 'Speaker view' }).click();
+        await page
+          .getByRole('button', { name: 'Speaker view', exact: true, pressed: false })
+          .click();
       }
       await page.keyboard.press('Escape');
 
-      await page.getByRole('button', { name: 'Open people' }).click();
+      await page.getByRole('button', { name: 'People', exact: true }).click();
       await shot(page, `${size}-${theme}-people`);
       // A phone's sheet covers the capsule; its own close button is everywhere.
       await page

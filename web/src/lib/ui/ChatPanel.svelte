@@ -331,8 +331,7 @@
         maxlength={maximumChatLength}
         placeholder="Message everyone"
         onkeydown={keydown}
-        onpaste={paste}
-      ></textarea>
+        onpaste={paste}></textarea>
       <button class="send" type="submit" disabled={!draft.trim()} aria-label="Send message">
         <ArrowRight size={16} weight="regular" aria-hidden="true" />
       </button>

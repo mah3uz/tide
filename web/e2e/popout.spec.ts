@@ -137,11 +137,15 @@ test('a popped-out share plays in its own window and comes back on request', asy
   await expect(page.getByRole('button', { name: 'Pop out screen share' })).toHaveCount(0);
 
   // The window's controls drive the meeting itself.
-  await popup.getByRole('button', { name: 'Mute microphone' }).click();
+  await popup.getByRole('button', { name: 'Microphone', exact: true, pressed: true }).click();
   await expect(
-    page.getByRole('navigation', { name: 'Meeting controls' }).getByLabel('Unmute microphone')
+    page
+      .getByRole('navigation', { name: 'Meeting controls' })
+      .getByRole('button', { name: 'Microphone', exact: true, pressed: false })
   ).toBeVisible();
-  await expect(popup.getByRole('button', { name: 'Unmute microphone' })).toBeVisible();
+  await expect(
+    popup.getByRole('button', { name: 'Microphone', exact: true, pressed: false })
+  ).toBeVisible();
 
   // Bring it back, from the page.
   await Promise.all([

@@ -112,7 +112,7 @@
         class="toggle"
         class:on={rtc.micEnabled}
         class:off={!rtc.micEnabled}
-        aria-label={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+        aria-label="Microphone"
         aria-pressed={rtc.micEnabled}
         aria-busy={rtc.mediaBusy.microphone}
         title={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
@@ -128,7 +128,7 @@
         type="button"
         class="toggle"
         class:off={!rtc.camEnabled}
-        aria-label={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
+        aria-label="Camera"
         aria-pressed={rtc.camEnabled}
         aria-busy={rtc.mediaBusy.camera}
         title={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}

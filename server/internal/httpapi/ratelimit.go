@@ -194,10 +194,10 @@ func newClientIPResolver(trusted []*net.IPNet) *clientIPResolver {
 	return &clientIPResolver{trusted: trusted}
 }
 
-// key is the client's rate-limit bucket: its IPv4 address, or the /64 its
-// IPv6 address is in. A /64 is the smallest network an ISP assigns one
-// subscriber, who can use any address in it, so counting addresses would
-// give every client 2^64 buckets.
+// key is the client's rate-limit bucket: its IPv4 address, or the /56 its
+// IPv6 address is in. A subscriber can use any address in the prefix their
+// ISP delegates, and that is often a /56 (256 /64s), so counting addresses,
+// or /64s, would give one client many buckets.
 func (c *clientIPResolver) key(r *http.Request) string {
 	address := c.resolve(r)
 	ip, err := netip.ParseAddr(address)
@@ -208,7 +208,7 @@ func (c *clientIPResolver) key(r *http.Request) string {
 	if ip.Is4() {
 		return ip.String()
 	}
-	network, err := ip.Prefix(64)
+	network, err := ip.Prefix(56)
 	if err != nil {
 		return address
 	}
@@ -222,20 +222,41 @@ func (c *clientIPResolver) resolve(r *http.Request) string {
 	}
 	// Walk X-Forwarded-For right to left, skipping our own trusted hops;
 	// the first untrusted address is the client as seen by the edge proxy.
-	hops := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	// A proxy may add its own X-Forwarded-For line rather than append to
+	// the client's, so every line counts, in order: the first is the
+	// client's own and must not be the one believed.
+	var hops []string
+	for _, line := range r.Header.Values("X-Forwarded-For") {
+		hops = append(hops, strings.Split(line, ",")...)
+	}
 	for i := len(hops) - 1; i >= 0; i-- {
 		hop := strings.TrimSpace(hops[i])
 		if hop == "" {
 			continue
 		}
-		if net.ParseIP(hop) == nil {
+		address, ok := forwardedAddress(hop)
+		if !ok {
 			return peer // malformed header — fall back to the proxy address
 		}
-		if !c.isTrusted(hop) {
-			return hop
+		if !c.isTrusted(address) {
+			return address
 		}
 	}
 	return peer
+}
+
+// forwardedAddress reads one X-Forwarded-For hop. Some proxies write the
+// client's port too ("192.0.2.1:5678", "[2001:db8::1]:5678"), and an
+// IPv6 address may carry a zone; the bucket is the address alone.
+func forwardedAddress(hop string) (string, bool) {
+	if port, err := netip.ParseAddrPort(hop); err == nil {
+		return port.Addr().WithZone("").Unmap().String(), true
+	}
+	address, err := netip.ParseAddr(strings.Trim(hop, "[]"))
+	if err != nil {
+		return "", false
+	}
+	return address.WithZone("").Unmap().String(), true
 }
 
 func (c *clientIPResolver) isTrusted(address string) bool {

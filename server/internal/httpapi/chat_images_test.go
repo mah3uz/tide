@@ -41,17 +41,23 @@ func TestChatImagesSwitchReachesHostsAndGuests(t *testing.T) {
 // nothing else gains it: a blob: script source would let a page run code it
 // made itself.
 func TestContentSecurityPolicyAllowsBlobImagesOnly(t *testing.T) {
-	directives := map[string]string{}
-	for _, directive := range strings.Split(contentSecurityPolicy, ";") {
-		name, sources, _ := strings.Cut(strings.TrimSpace(directive), " ")
-		directives[name] = sources
+	policies, err := newContentSecurityPolicies(config.Config{}, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got, want := directives["img-src"], "'self' data: blob:"; got != want {
-		t.Fatalf("img-src = %q, want %q", got, want)
-	}
-	for name, sources := range directives {
-		if name != "img-src" && name != "media-src" && strings.Contains(sources, "blob:") {
-			t.Errorf("%s = %q allows blob:", name, sources)
+	for _, policy := range []string{policies.page, policies.recorder} {
+		directives := map[string]string{}
+		for _, directive := range strings.Split(policy, ";") {
+			name, sources, _ := strings.Cut(strings.TrimSpace(directive), " ")
+			directives[name] = sources
+		}
+		if got, want := directives["img-src"], "'self' data: blob:"; got != want {
+			t.Fatalf("img-src = %q, want %q", got, want)
+		}
+		for name, sources := range directives {
+			if name != "img-src" && name != "media-src" && strings.Contains(sources, "blob:") {
+				t.Errorf("%s = %q allows blob:", name, sources)
+			}
 		}
 	}
 }

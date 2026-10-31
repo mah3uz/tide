@@ -35,12 +35,16 @@ test('chat is bidirectional, counts unread messages, and has no rejoin history',
     const guest = await (await newContext()).newPage();
     await joinAsGuestThroughLobby(guest, host, slug, 'Chat guest');
 
-    await host.getByRole('button', { name: 'Open chat' }).click();
+    await host.getByRole('button', { name: 'Chat', exact: true, pressed: false }).click();
     const hostChat = host.getByRole('complementary', { name: 'Chat' });
     await hostChat.getByRole('textbox', { name: 'Chat message' }).fill('Hello from host');
     await hostChat.getByRole('textbox', { name: 'Chat message' }).press('Enter');
 
-    const guestChatButton = guest.getByRole('button', { name: 'Open chat' });
+    const guestChatButton = guest.getByRole('button', {
+      name: 'Chat',
+      exact: true,
+      pressed: false
+    });
     await expect(guestChatButton.locator('.badge')).toHaveText('1', { timeout: 20_000 });
     await guestChatButton.click();
     const guestChat = guest.getByRole('complementary', { name: 'Chat' });
@@ -51,7 +55,7 @@ test('chat is bidirectional, counts unread messages, and has no rejoin history',
 
     await guest.reload();
     await joinAsGuestThroughLobby(guest, host, slug, 'Chat guest');
-    await guest.getByRole('button', { name: 'Open chat' }).click();
+    await guest.getByRole('button', { name: 'Chat', exact: true, pressed: false }).click();
     const freshChat = guest.getByRole('complementary', { name: 'Chat' });
     await expect(freshChat.getByText('Messages appear here for this meeting only.')).toBeVisible();
     await expect(freshChat.getByText('Hello from host')).toHaveCount(0);
@@ -87,7 +91,7 @@ test.describe('chat messages from other participants', () => {
       if ((await toggle.getAttribute('aria-pressed')) === 'true') await toggle.click();
     }
     await page.getByRole('button', { name: 'Join meeting' }).click();
-    await page.getByRole('button', { name: 'Open chat' }).click();
+    await page.getByRole('button', { name: 'Chat', exact: true }).click();
   }
 
   function receive(
@@ -313,7 +317,7 @@ test.describe('chat messages from other participants', () => {
       if ((await toggle.getAttribute('aria-pressed')) === 'true') await toggle.click();
     }
     await page.getByRole('button', { name: 'Join meeting' }).click();
-    await expect(page.getByRole('button', { name: 'Open chat' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Chat', exact: true })).toBeVisible();
     sfu.addParticipant('guest:pat', 'Pat Lee');
     await page.waitForFunction(() =>
       (window as unknown as ImageWindow).__tideRoom.remoteParticipants.has('guest:pat')

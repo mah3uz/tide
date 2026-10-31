@@ -20,8 +20,9 @@ import { expectMediaElementTags, tagMediaElements } from './media-helpers';
  * Every incident so far has been an *existing* client failing to notice a
  * change, so that is what these cover.
  *
- * Actors use the project's browser, so the whole file runs on chromium, webkit
- * and firefox. Nothing here calls getUserMedia (see harness/meeting.ts), so no
+ * Actors use the project's browser, so the file runs on chromium and firefox;
+ * the webkit project skips it (issue #55, see playwright.media.config.ts).
+ * Nothing here calls getUserMedia (see harness/meeting.ts), so no
  * browser-specific capture flags are involved.
  */
 
@@ -156,11 +157,11 @@ test('a camera that cannot open leaves the participant in the meeting', async ({
     await guest.clearLedger();
 
     const bar = guest.page.getByRole('navigation', { name: 'Meeting controls' });
-    await bar.getByRole('button', { name: 'Turn camera on' }).click();
+    await bar.getByRole('button', { name: 'Camera', exact: true, pressed: false }).click();
     await expect(bar.getByRole('alert')).toHaveText(
       'Your browser only allows the camera on https pages. Open the meeting over https.'
     );
-    await expect(bar.getByRole('button', { name: 'Turn camera on' })).toHaveAttribute(
+    await expect(bar.getByRole('button', { name: 'Camera', exact: true })).toHaveAttribute(
       'aria-pressed',
       'false'
     );

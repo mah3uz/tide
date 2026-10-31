@@ -58,6 +58,10 @@ requests without a body on `/rtc`, which is all signaling ever sends. Media does
 the address the media server advertises, on 7882/udp or 7881/tcp. Both are
 encrypted by WebRTC; neither is HTTP.
 
+tide has no TURN relay, so media never falls back to 443. A participant on a
+network that allows only HTTPS out (some corporate and hotel networks) can
+join the meeting but sends and receives no audio or video.
+
 ### The media address
 
 `TIDE_MEDIA_NODE_IP` is the address the media server advertises to browsers.
@@ -107,26 +111,44 @@ or stopping in that moment may fail. Without recording, tide uses no Redis.
 The quickest real deployment: a Linux VM with a public IPv4 address, tide
 under systemd, and Caddy in front for HTTPS.
 
-Build the binary for the server's platform. `make build` writes `bin/tide`
-for the machine it runs on; from anywhere with Docker:
+Each [release](https://github.com/Convex-Works/tide/releases) has the static
+binary for linux/amd64 and linux/arm64, with a `SHA256SUMS` file. On the
+server (use `tide-linux-arm64` on arm64):
+
+```sh
+curl -fLO https://github.com/Convex-Works/tide/releases/latest/download/tide-linux-amd64
+curl -fLO https://github.com/Convex-Works/tide/releases/latest/download/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+sudo install -m 755 tide-linux-amd64 /usr/local/bin/tide
+```
+
+`tide version` prints the release a binary is, and tide's first log line
+names it too.
+
+Or build it. `make build` writes `bin/tide` for the machine it runs on; from
+anywhere with Docker:
 
 ```sh
 docker buildx build --platform linux/amd64 --output type=local,dest=out .
 # out/tide is the static binary
 ```
 
-Copy it to `/usr/local/bin/tide`. Open 80/tcp and 443/tcp (Caddy and its
+and copy it to `/usr/local/bin/tide`. Open 80/tcp and 443/tcp (Caddy and its
 certificates), 7881/tcp and 7882/udp (media) in the server's firewall.
 
-Caddy's whole configuration, in `/etc/caddy/Caddyfile`:
+Point the DNS name (`meet.example.com` here) at the server's address before
+Caddy starts: it requests the certificate at startup and needs the name to
+resolve to this server. Install Caddy from its packages
+(<https://caddyserver.com/docs/install>), which run it under systemd. Its whole
+configuration, in `/etc/caddy/Caddyfile`:
 
 ```
 meet.example.com
 reverse_proxy 127.0.0.1:8080
 ```
 
-Caddy gets and renews the certificate, and passes WebSocket upgrades and
-streams through as they are.
+`systemctl reload caddy` applies it. Caddy gets and renews the certificate,
+and passes WebSocket upgrades and streams through as they are.
 
 ### Anonymous
 
@@ -179,13 +201,14 @@ TIDE_DB_PATH=/var/lib/tide/tide.db
 ```
 
 systemd reads only whole-line comments in an environment file: a `# …` after
-a value becomes part of it.
+a value becomes part of it. `systemctl restart tide` applies the change.
 
 Rooms now persist in SQLite under the service's state directory; back it up
 ([Back up state](#back-up-state)). Recording needs the recorder, which runs in
-Docker, and Redis: the next section runs both with Docker Compose. To keep
-tide under systemd instead, Redis can come from the distribution, configured
-like this and listening where tide looks by default:
+Docker, and Redis: the next section runs both with Docker Compose, and this
+guide documents recording only there. To keep tide under systemd instead,
+Redis can come from the distribution, configured like this and listening where
+tide looks by default:
 
 ```
 bind 127.0.0.1
@@ -234,7 +257,7 @@ TIDE_RECORDER_TEMPLATE_URL=http://127.0.0.1:8080/egress-template
 ```yaml
 services:
   tide:
-    image: registry.example.com/tide:1.0.0
+    image: ghcr.io/convex-works/tide:0.1.2
     env_file: .env
     network_mode: host
     volumes:
@@ -264,7 +287,7 @@ services:
     restart: unless-stopped
 
   recorder:
-    image: livekit/egress:v1.13.0
+    image: livekit/egress:v1.15.0
     network_mode: service:tide
     # The recorder checks Redis once at startup and exits without it.
     depends_on:
@@ -361,12 +384,19 @@ resources:
 components:
   - ../../k8s/recording # leave out for no recording
 images:
-  - name: registry.example.com/tide
-    newName: <registry>/tide
-    newTag: <version>
+  - name: ghcr.io/convex-works/tide
+    newTag: 0.1.2 # or newName: <registry>/tide for your own build
 patches:
   - path: tide.yaml # the OVERLAY values, and the media path
 ```
+
+Set `TIDE_TRUSTED_PROXIES` in the overlay. The base leaves it empty, and
+behind an ingress every visitor then arrives from the ingress controller's
+address: the whole installation shares one rate limit of 10 joins and 10
+sign-ins a minute. Set it to the cluster's pod CIDR (for example
+`10.244.0.0/16`; it's in the cluster's network configuration), since the
+controller's pods get new addresses when they restart. With an ingress
+controller on host networking, use the nodes' addresses instead.
 
 The ingress has one host and one route, to the `tide` Service on 8080. It
 must pass WebSocket upgrades (signaling is a GET with `Upgrade` on `/rtc`, and
@@ -465,14 +495,14 @@ or equal to a value shipped in this repository refuses startup.
 | `TIDE_RECORDER_REDIS_ADDR`     | `127.0.0.1:6379`                       | The Redis tide's media server and the recorder share, as `host:port` (a name or an address), with recording and the embedded media server ([Redis, with recording](#redis-with-recording)). Keep it off public networks: recording jobs carry the S3 credentials. |
 | `TIDE_RECORDER_REDIS_PASSWORD` | none                                   | With recording and the embedded media server: required, at least 32 characters. Redis's `requirepass` (tide refuses a Redis without one), and the recorder's `redis.password`.                                                                                    |
 | `TIDE_TRUSTED_PROXIES`         | empty                                  | Comma-separated IPs or CIDRs of proxies whose `X-Forwarded-For` tide believes. Only your proxy or ingress. An invalid entry refuses startup.                                                                                                                      |
-| `TIDE_DEV_MODE`                | `false`                                | Supplies the publicly known development value for any secret left unset and exposes `/api/dev/token`. Turns nothing else on. Never in production.                                                                                                                 |
+| `TIDE_DEV_MODE`                | `false`                                | Supplies the publicly known development value for any secret left unset and exposes `/api/dev/token`. Turns nothing else on. Refused unless `TIDE_BASE_URL` is local: localhost, a loopback or private address, or a one-label host.                              |
 | `TIDE_JOIN_RATE_LIMIT`         | `10`                                   | Joins per client per minute. Also sizes, in buckets of their own, room lookups and, when anonymous, room creation.                                                                                                                                                |
 | `TIDE_WAIT_RATE_LIMIT`         | `20`                                   | Lobby wait streams per client per minute.                                                                                                                                                                                                                         |
 | `TIDE_LOGIN_RATE_LIMIT`        | `10`                                   | Sign-in redirects per client per minute; when anonymous, new anonymous sessions.                                                                                                                                                                                  |
 | `TIDE_PAIR_RATE_LIMIT`         | `10`                                   | With transcripts, machines starting a moil pairing (`POST /moil/v1/pair`) per client per minute.                                                                                                                                                                  |
 | `TIDE_TRANSCRIPTS`             | `false`                                | Turns on transcripts and machine pairing ([Serve transcripts](#serve-transcripts)); needs recording. Read with `strconv.ParseBool`; anything else means off.                                                                                                      |
 
-Rate limits count an IPv6 client by its /64 and an IPv4 client by its
+Rate limits count an IPv6 client by its /56 and an IPv4 client by its
 address; both come from `X-Forwarded-For` only through `TIDE_TRUSTED_PROXIES`.
 Anonymous sessions cost nothing to make, so when anonymous, room lookups count
 them per client address as they do guests, and room creation is also capped

@@ -1,0 +1,66 @@
+# Weekly version updates. Minor and patch bumps arrive as one grouped pull
+# request per ecosystem and directory; majors stay separate so each gets its
+# own review. Security updates are not limited by this schedule.
+
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directories: [/web, /site]
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        update-types: [minor, patch]
+    ignore:
+      # TypeScript 7 is blocked: @sveltejs/kit's peer range is ^6, and
+      # svelte-check/svelte2tsx can't load TS 7's API
+      # (sveltejs/language-tools#2733).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Bumped by hand together with the mcr.microsoft.com/playwright runner
+      # image in deploy/media-test/runner.Dockerfile; the two must match.
+      - dependency-name: "@playwright/test"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories: [/, /site, /deploy, /deploy/media-test]
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        update-types: [minor, patch]
+    ignore:
+      # We move to each Node LTS major by hand.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+      # Go minors move by hand: the tide builder follows server/go.mod's go
+      # line, and the MinIO build pins the Go its release supports.
+      - dependency-name: golang
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      # Bumped by hand together with @playwright/test in web/; the two must
+      # match.
+      - dependency-name: "*playwright"
+
+  - package-ecosystem: docker-compose
+    directories: [/deploy, /deploy/media-test]
+    schedule:
+      interval: weekly
+    groups:
+      compose:
+        update-types: [minor, patch]

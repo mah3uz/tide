@@ -206,7 +206,7 @@ async function openChat(page: Page, chatImages: boolean): Promise<FakeSfu> {
     if ((await toggle.getAttribute('aria-pressed')) === 'true') await toggle.click();
   }
   await page.getByRole('button', { name: 'Join meeting' }).click();
-  await page.getByRole('button', { name: 'Open chat' }).click();
+  await page.getByRole('button', { name: 'Chat', exact: true }).click();
   sfu.addParticipant('guest:mallory', 'Mallory Guest');
   await page.waitForFunction(() =>
     (window as unknown as TestWindow).__tideRoom.remoteParticipants.has('guest:mallory')
@@ -574,7 +574,7 @@ test("an image's memory is given back when it leaves the chat, and when the meet
 
   await page.getByRole('button', { name: 'Leave or end meeting' }).click();
   await page.getByRole('button', { name: 'Leave room' }).click();
-  await expect(page.getByRole('button', { name: 'Open chat' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Chat', exact: true })).toHaveCount(0);
   const after = await revoked();
   for (const url of kept) expect(after).toContain(url);
 });

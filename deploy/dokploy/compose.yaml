@@ -15,6 +15,9 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        # What `tide version` prints and the first log line says.
+        TIDE_VERSION: ${TIDE_VERSION:-redesigned}
     env_file: .env
     environment:
       TIDE_ADDR: :8080

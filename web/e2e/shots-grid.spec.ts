@@ -29,7 +29,9 @@ test('capture grid at 3, 5, 10 participants', async () => {
       if (i === 0) hostPage = page;
     }
     // Orbit is the default and shows at most six people; the grid shows everyone.
-    await hostPage!.getByRole('button', { name: 'Grid view' }).click();
+    await hostPage!
+      .getByRole('button', { name: 'Speaker view', exact: true, pressed: true })
+      .click();
     await expect(hostPage!.locator('video')).toHaveCount(count, { timeout: 60_000 });
     await hostPage!.waitForTimeout(2500);
     await hostPage!.screenshot({ path: `shots/grid-${count}.png` });

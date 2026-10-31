@@ -26,6 +26,7 @@ import {
   TranscriptFailed,
   TranscriptWaiting,
   type CreateRoomRequest,
+  type LobbyRequestInfo,
   type MachineInfo,
   type MachinesResponse,
   type Me,
@@ -68,6 +69,8 @@ export interface ApiState {
   pairings: Record<string, PairingInfo>;
   /** TIDE_CHAT_IMAGES, as rooms' public info tells every participant; default off. */
   chatImages?: boolean;
+  /** Guests the host's lobby stream reports waiting; default none. */
+  lobbyPending?: LobbyRequestInfo[];
 }
 
 export interface MockApi {
@@ -320,12 +323,13 @@ export async function mockApi(page: Page, state: ApiState = defaultState()): Pro
     }
     if (!state.signedIn) return json(401, { error: 'Authentication required.' });
 
-    // The host's lobby stream, with nobody waiting.
+    // The host's lobby stream, with whoever the spec has waiting.
     if (method === 'GET' && match(RoomLobbyPath, path)) {
+      const pending = JSON.stringify({ requests: state.lobbyPending ?? [] });
       return route.fulfill({
         status: 200,
         contentType: 'text/event-stream',
-        body: 'retry: 60000\nevent: pending\ndata: {"requests":[]}\n\n'
+        body: `retry: 60000\nevent: pending\ndata: ${pending}\n\n`
       });
     }
 

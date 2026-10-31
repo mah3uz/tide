@@ -67,7 +67,10 @@ device controls). No filled/duotone or bold variants.
 **The brand mark** is isolated in `lib/ui/BrandMark.svelte` (the in-app logo)
 and `web/static/brand/app-icon.svg` (the source of the PWA and favicon
 images). Swapping the logo touches those two files; `npm run icons` regenerates
-the PNG icons from the SVG.
+the PNG icons from the SVG. The link preview, `web/static/og.png`, replaces
+upstream's image of the same name; it is rendered from
+`docs/assets/fork-social-preview.html` (the command is in that file), so
+re-render it after a logo or theme change.
 
 **The Orbit stage.** The most recent remote speaker fills the **lens**; everyone
 else, you included, is a **portal** around it. The **grid** view (the view
@@ -215,3 +218,17 @@ git checkout redesigned && git merge main
 Merge, never rebase. `git rerere` is on, so a conflict is resolved once. Keep
 fork changes in new files, and keep upstream files to a one-line pointer where
 possible.
+
+Upstream files the fork edits on purpose, which a merge may touch again:
+
+- `server/internal/httpapi/security.go` and `security_test.go`: img-src allows
+  `blob:` for chat images, and the built shell has two inline scripts (the
+  theme script in `app.html` and SvelteKit's bootstrap), both allowed by hash.
+- `web/static/og.png`: our link preview (above).
+- `web/src/lib/ui/ControlBar.svelte` and `m/[slug]/+page.svelte`: rewritten for
+  Orbit, so upstream changes to them are ported by hand, not merged.
+
+Upstream's `.github/workflows/release.yml` publishes to
+`ghcr.io/convex-works/tide` on a `v*` tag, so don't push version tags to the
+fork. Dependabot in this repository should stay off: its PRs target `main`,
+which must stay a mirror of upstream.

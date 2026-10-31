@@ -17,14 +17,13 @@ This guide puts tide on one Linux server. For Kubernetes, see [Kubernetes](#kube
 | `7882/udp`          | audio and video                     |
 | `7881/tcp`          | audio and video when UDP is blocked |
 
-## 2. Get tide
+tide has no relay on port 443. On a network that allows only HTTPS, people can join but get no audio or video.
+
+## 2. Write the configuration
 
 ```sh
 mkdir /srv/tide && cd /srv/tide
-git clone https://github.com/Convex-Works/tide.git src
 ```
-
-## 3. Write the configuration
 
 `/srv/tide/.env`:
 
@@ -47,7 +46,7 @@ services:
     restart: unless-stopped
 
   tide:
-    build: src
+    image: ghcr.io/convex-works/tide:0.1.2
     env_file: .env
     network_mode: host
     volumes:
@@ -62,16 +61,16 @@ volumes:
 
 Caddy gets the HTTPS certificate. Browsers need HTTPS to use the camera.
 
-## 4. Start tide
+## 3. Start tide
 
 ```sh
-docker compose up -d --build
+docker compose up -d
 docker compose logs tide | grep 'tide: '
 ```
 
 The log shows `tide: anonymous, …`. Anyone who opens `https://meet.example.com` can make a room. tide deletes a room 24 hours after its last use.
 
-## 5. Check tide
+## 4. Check tide
 
 ```sh
 curl -fsS https://meet.example.com/healthz                               # ok
@@ -144,7 +143,7 @@ Recording needs sign-in.
      restart: unless-stopped
 
    recorder:
-     image: livekit/egress:v1.13.0
+     image: livekit/egress:v1.15.0
      network_mode: service:tide
      depends_on:
        redis:
@@ -171,12 +170,12 @@ Recording needs sign-in.
 
 ## Kubernetes
 
-You need Kubernetes 1.29 or later, a node with a public IPv4 address, an ingress, and a registry.
+You need Kubernetes 1.29 or later, a node with a public IPv4 address, and an ingress.
 
-1. Build and push the image from the repository:
+1. Get the manifests of the release. The image is `ghcr.io/convex-works/tide:0.1.2`.
 
    ```sh
-   docker buildx build --platform linux/amd64 -t <registry>/tide:<version> --push .
+   git clone --depth 1 --branch v0.1.2 https://github.com/Convex-Works/tide.git && cd tide
    ```
 
 2. Make the namespace and the secrets. Keep nothing else in this namespace: tide uses host ports, and the recorder needs `SYS_ADMIN`. Also make a TLS secret `tide-tls` for the host.
@@ -211,14 +210,13 @@ You need Kubernetes 1.29 or later, a node with a public IPv4 address, an ingress
    components:
      - ../../k8s/recording # only for recording
    images:
-     - name: registry.example.com/tide
-       newName: <registry>/tide
-       newTag: <version>
+     - name: ghcr.io/convex-works/tide
+       newTag: 0.1.2
    patches:
      - path: tide.yaml
    ```
 
-4. Make `tide.yaml` in the same folder. Without sign-in, set `TIDE_OIDC_ISSUER` to `""`. For recording, also set `TIDE_S3_ENDPOINT`, `TIDE_S3_PUBLIC_ENDPOINT`, `TIDE_S3_RECORDER_ENDPOINT`, `TIDE_S3_BUCKET` and `TIDE_S3_REGION`.
+4. Make `tide.yaml` in the same folder. Set `TIDE_TRUSTED_PROXIES` to the cluster's pod CIDR, for example `10.244.0.0/16`, or all visitors share one rate limit. Without sign-in, set `TIDE_OIDC_ISSUER` to `""`. For recording, also set `TIDE_S3_ENDPOINT`, `TIDE_S3_PUBLIC_ENDPOINT`, `TIDE_S3_RECORDER_ENDPOINT`, `TIDE_S3_BUCKET` and `TIDE_S3_REGION`.
 
    ```yaml
    apiVersion: apps/v1
@@ -246,6 +244,8 @@ You need Kubernetes 1.29 or later, a node with a public IPv4 address, an ingress
                  value: <issuer>
                - name: TIDE_OIDC_CLIENT_ID
                  value: <client id>
+               - name: TIDE_TRUSTED_PROXIES
+                 value: <pod CIDR>
    ---
    apiVersion: v1
    kind: PersistentVolumeClaim
@@ -280,7 +280,7 @@ You need Kubernetes 1.29 or later, a node with a public IPv4 address, an ingress
                  service: { name: tide, port: { number: 8080 } }
    ```
 
-6. Apply, then do the checks in [step 5](#5-check-tide).
+6. Apply, then do the checks in [step 4](#4-check-tide).
 
    ```sh
    kubectl kustomize deploy/overlays/production | grep -nE '<|example\.com'   # must print nothing
@@ -288,17 +288,23 @@ You need Kubernetes 1.29 or later, a node with a public IPv4 address, an ingress
    kubectl -n tide rollout status deploy/tide
    ```
 
-Run one replica only. Set `TIDE_TRUSTED_PROXIES` to your ingress pods' addresses, or all visitors share one rate limit. Without a public node, use a UDP load balancer: see the end of `deploy/k8s/tide.yaml`.
+Run one replica only. Without a public node, use a UDP load balancer: see the end of `deploy/k8s/tide.yaml`.
 
 ## Upgrade
 
 A restart ends all meetings. Upgrade when no meeting runs. Back up first: tide cannot go back to an older database.
 
+Set the new version in the `image:` line of `compose.yaml`. The [releases](https://github.com/Convex-Works/tide/releases) list the versions. Then run:
+
 ```sh
-git -C src pull && docker compose up -d --build
+docker compose pull && docker compose up -d
 ```
 
-On Kubernetes, push a new image, set its tag in `kustomization.yaml`, and apply.
+On Kubernetes, check out the new release in the clone, set the new tag in `kustomization.yaml` and apply:
+
+```sh
+git fetch --depth 1 origin tag v<version> && git checkout v<version>
+```
 
 ## Back up
 
@@ -318,7 +324,7 @@ Read the log first: `docker compose logs`, or `kubectl -n tide logs deploy/tide 
 | Problem                              | Cause and fix                                                                                     |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
 | Sign-in shows 502                    | tide cannot reach the provider, or `TIDE_OIDC_ISSUER` is not exact.                               |
-| Calls connect, but there is no video | `7882/udp` is closed. Behind NAT, set `TIDE_MEDIA_NODE_IP` to the public IPv4 address.            |
+| Calls connect, but there is no video | `7882/udp` is closed. Open it. tide finds its public address: leave `TIDE_MEDIA_NODE_IP` unset.   |
 | A recording stays at "starting"      | The recorder cannot reach tide. Make sure that both use the same key, secret and Redis password.  |
 | A recording fails after a minute     | The recorder cannot reach the media. Set `TIDE_MEDIA_NODE_IP` only to an address that is local.   |
 | A download fails                     | Browsers cannot reach the bucket. Set `TIDE_S3_PUBLIC_ENDPOINT`.                                  |
