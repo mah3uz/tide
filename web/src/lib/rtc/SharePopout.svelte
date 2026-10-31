@@ -44,6 +44,10 @@
   });
   const portals = $derived(people.slice(0, shownPortals));
   const more = $derived(people.length - portals.length);
+
+  let shareWidth = $state(0);
+  let shareHeight = $state(0);
+  const shareAspect = $derived(shareWidth && shareHeight ? shareWidth / shareHeight : undefined);
 </script>
 
 <div class="popout">
@@ -59,87 +63,91 @@
     </button>
   </header>
 
-  <div class="frame">
-    {#if presenter?.screenShare}
-      {#key presenter.screenShare.publicationSid}
-        <!-- Live screen share does not have a caption track. -->
-        <video
-          class="share"
-          use:attachMediaTrack={presenter.screenShare}
-          autoplay
-          playsinline
-          muted
-          aria-label={`${presenter.name}'s screen share`}
-        ></video>
-      {/key}
-    {/if}
+  <div class="stage">
+    <div class="frame" class:fitted={shareAspect !== undefined} style:--share-aspect={shareAspect}>
+      {#if presenter?.screenShare}
+        {#key presenter.screenShare.publicationSid}
+          <!-- Live screen share does not have a caption track. -->
+          <video
+            class="share"
+            use:attachMediaTrack={presenter.screenShare}
+            bind:videoWidth={shareWidth}
+            bind:videoHeight={shareHeight}
+            autoplay
+            playsinline
+            muted
+            aria-label={`${presenter.name}'s screen share`}
+          ></video>
+        {/key}
+      {/if}
 
-    <div class="cluster">
-      <div class="portals" role="group" aria-label="In the call">
-        {#each portals as person, index (person.identity)}
-          {@const color = participantColor(person.identity)}
-          {@const speaking = rtc.activeSpeakerIdentities.includes(person.identity)}
-          <span
-            class="portal"
-            class:lead={index === 0}
-            class:speaking
-            style:--pbg={`var(--p${color}-bg)`}
-            style:--pfg={`var(--p${color}-fg)`}
-            role="img"
-            aria-label={speaking ? `${person.name}, speaking` : person.name}
-            title={person.name}
-          >
-            {#if person.camera && !rtc.isParticipantCameraHidden(person.identity)}
-              <video
-                use:attachMediaTrack={person.camera}
-                autoplay
-                playsinline
-                muted
-                class:mirrored={person.isLocal}
-              ></video>
-            {:else}
-              {initials(person.name)}
-            {/if}
-          </span>
-        {/each}
-        {#if more > 0}
-          <span class="portal more" role="img" aria-label={`${more} more`}>+{more}</span>
-        {/if}
+      <div class="cluster">
+        <div class="portals" role="group" aria-label="In the call">
+          {#each portals as person, index (person.identity)}
+            {@const color = participantColor(person.identity)}
+            {@const speaking = rtc.activeSpeakerIdentities.includes(person.identity)}
+            <span
+              class="portal"
+              class:lead={index === 0}
+              class:speaking
+              style:--pbg={`var(--p${color}-bg)`}
+              style:--pfg={`var(--p${color}-fg)`}
+              role="img"
+              aria-label={speaking ? `${person.name}, speaking` : person.name}
+              title={person.name}
+            >
+              {#if person.camera && !rtc.isParticipantCameraHidden(person.identity)}
+                <video
+                  use:attachMediaTrack={person.camera}
+                  autoplay
+                  playsinline
+                  muted
+                  class:mirrored={person.isLocal}
+                ></video>
+              {:else}
+                {initials(person.name)}
+              {/if}
+            </span>
+          {/each}
+          {#if more > 0}
+            <span class="portal more" role="img" aria-label={`${more} more`}>+{more}</span>
+          {/if}
+        </div>
+        <span class="separator" aria-hidden="true"></span>
+        <button
+          type="button"
+          class="toggle"
+          class:on={rtc.micEnabled}
+          class:off={!rtc.micEnabled}
+          aria-label="Microphone"
+          aria-pressed={rtc.micEnabled}
+          aria-busy={rtc.mediaBusy.microphone}
+          title={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+          onclick={() => void rtc.toggleMic()}
+        >
+          {#if rtc.micEnabled}
+            <Microphone size={16} weight="regular" aria-hidden="true" />
+          {:else}
+            <MicrophoneSlash size={16} weight="regular" aria-hidden="true" />
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="toggle"
+          class:off={!rtc.camEnabled}
+          aria-label="Camera"
+          aria-pressed={rtc.camEnabled}
+          aria-busy={rtc.mediaBusy.camera}
+          title={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
+          onclick={() => void rtc.toggleCam()}
+        >
+          {#if rtc.camEnabled}
+            <VideoCamera size={16} weight="regular" aria-hidden="true" />
+          {:else}
+            <VideoCameraSlash size={16} weight="regular" aria-hidden="true" />
+          {/if}
+        </button>
       </div>
-      <span class="separator" aria-hidden="true"></span>
-      <button
-        type="button"
-        class="toggle"
-        class:on={rtc.micEnabled}
-        class:off={!rtc.micEnabled}
-        aria-label="Microphone"
-        aria-pressed={rtc.micEnabled}
-        aria-busy={rtc.mediaBusy.microphone}
-        title={rtc.micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-        onclick={() => void rtc.toggleMic()}
-      >
-        {#if rtc.micEnabled}
-          <Microphone size={16} weight="regular" aria-hidden="true" />
-        {:else}
-          <MicrophoneSlash size={16} weight="regular" aria-hidden="true" />
-        {/if}
-      </button>
-      <button
-        type="button"
-        class="toggle"
-        class:off={!rtc.camEnabled}
-        aria-label="Camera"
-        aria-pressed={rtc.camEnabled}
-        aria-busy={rtc.mediaBusy.camera}
-        title={rtc.camEnabled ? 'Turn camera off' : 'Turn camera on'}
-        onclick={() => void rtc.toggleCam()}
-      >
-        {#if rtc.camEnabled}
-          <VideoCamera size={16} weight="regular" aria-hidden="true" />
-        {:else}
-          <VideoCameraSlash size={16} weight="regular" aria-hidden="true" />
-        {/if}
-      </button>
     </div>
   </div>
 </div>
@@ -218,15 +226,29 @@
     background: var(--surface-2);
   }
 
-  .frame {
-    position: relative;
+  .stage {
     display: grid;
     min-height: 0;
     flex: 1;
+    place-items: center;
+    container-type: size;
+  }
+
+  .frame {
+    position: relative;
+    display: grid;
+    width: 100%;
+    height: 100%;
     grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     overflow: hidden;
     background: var(--surface);
     border-radius: var(--r-md);
+  }
+
+  /* The share's own shape, so the picture fills the frame, not bars inside it. */
+  .frame.fitted {
+    width: min(100cqw, 100cqh * var(--share-aspect));
+    height: min(100cqh, 100cqw / var(--share-aspect));
   }
 
   .share {
